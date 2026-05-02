@@ -12,7 +12,7 @@
 特征：
 
 - 运行时业务代码零第三方依赖（仅 Python 标准库）。
-- 单进程、单连接、单文件传输模型（符合 V1.0 功能边界）。
+- 单进程、单连接、会话级多条目传输模型（V1.2 支持多文件与目录递归）。
 - V1.1 新增打包发布层，交付免 Python 环境安装包。
 
 ## 2. 目录结构
@@ -55,16 +55,17 @@ FileFerry/
 ### 3.1 二进制格式
 
 1. `header_length`：4 字节无符号整数，网络字节序（big-endian）。
-2. `header_json`：UTF-8 JSON，字段为：
-   - `filename: string`
-   - `filesize: int`
-3. `file_bytes`：原始文件字节流，长度必须等于 `filesize`。
+2. `header_json`：UTF-8 JSON，会话帧字段示例：
+   - `type: session_start|entry_dir|entry_file|entry_result|session_end|session_result`
+   - `relative_path: string`（仅条目帧）
+   - `payload_size: int`（文件条目为文件字节数）
+3. `file_bytes`：当 `type=entry_file` 时附带原始文件字节流，长度等于 `payload_size`。
 
 ### 3.2 协议防御
 
 - `header_length` 不能为 0，且上限 64KB。
-- `filename` 禁止包含路径分隔符（防路径穿越）。
-- `filesize` 必须为非负整数。
+- `relative_path` 禁止绝对路径与 `..`（防路径穿越）。
+- `payload_size` 必须为非负整数。
 
 ## 4. API 接口设计
 
@@ -75,19 +76,28 @@ FileFerry/
 - 发送端：
 
 ```bash
-python3 -m fileferry send --host <IP> --port <PORT> --file <FILE> [--timeout 10] [--chunk-size 65536]
+python3 -m fileferry send --host <IP> --port <PORT> \
+  (--file <FILE> | --src <PATH> [--src <PATH> ...]) \
+  [--conflict overwrite|skip|rename] \
+  [--continue-on-error|--fail-fast] \
+  [--timeout 10] [--chunk-size 65536]
 ```
 
 - 接收端：
 
 ```bash
-python3 -m fileferry recv --host 0.0.0.0 --port <PORT> [--output-dir DIR] [--timeout 10] [--chunk-size 65536]
+python3 -m fileferry recv --host 0.0.0.0 --port <PORT> \
+  [--output-dir DIR] \
+  [--conflict overwrite|skip|rename] \
+  [--continue-on-error|--fail-fast] \
+  [--timeout 10] [--chunk-size 65536]
 ```
 
 ### 4.2 代码级接口
 
-- `sender.send_file(SenderConfig) -> SendResult`
-- `receiver.receive_once(ReceiverConfig) -> ReceiveResult`
+- `sender.send_session(SessionSenderConfig) -> SendSessionResult`
+- `receiver.receive_session(ReceiverConfig) -> ReceiveSessionResult`
+- 兼容接口：`sender.send_file(SenderConfig)`、`receiver.receive_once(ReceiverConfig)`
 
 ## 5. 数据建模
 
