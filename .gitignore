@@ -3,9 +3,39 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .mypy_cache/
+.hypothesis/
+
+venv/
+.venv/
+env/
 
 build/
 dist/
+*.egg
+*.whl
 
 .DS_Store
 Thumbs.db
+
+.vscode/
+.idea/
+
+*.log
+logs/
+
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+*.so
+*.pyd
+
+*.rpm
+*.deb
+*.pkg
+*.dmg
+
+# 打包后的文件
+dist/
+build/
