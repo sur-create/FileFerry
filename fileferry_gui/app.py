@@ -5,6 +5,17 @@ from __future__ import annotations
 import sys
 
 
+def _load_main_window():
+    try:
+        from .main_window import MainWindow
+        return MainWindow
+    except ImportError:
+        # PyInstaller may execute this file as a top-level script (no package
+        # context), so relative imports are unavailable.
+        from fileferry_gui.main_window import MainWindow
+        return MainWindow
+
+
 def main() -> int:
     try:
         from PySide6.QtWidgets import QApplication
@@ -14,7 +25,7 @@ def main() -> int:
         print(f"详细信息：{exc}")
         return 1
 
-    from .main_window import MainWindow
+    MainWindow = _load_main_window()
 
     app = QApplication(sys.argv)
     app.setApplicationName("FileFerry")
