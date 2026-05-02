@@ -1,2 +1,2 @@
 @echo off
-"%~dp0fileferry.exe" recv %*
+"%~dp0fileferry-cli.exe" recv %*
