@@ -12,11 +12,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = ROOT / "packaging" / "pyinstaller" / "fileferry.spec"
+PYI_WORKDIR = SPEC.parent
 
 
-def run(command: list[str]) -> None:
+def run(command: list[str], *, cwd: Path | None = None) -> None:
     print("+", " ".join(command))
-    subprocess.run(command, cwd=ROOT, check=True)
+    subprocess.run(command, cwd=cwd or ROOT, check=True)
 
 
 def main() -> int:
@@ -25,7 +26,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if importlib.util.find_spec("PyInstaller") is None:
-        print("error: pyinstaller is not installed. Run: python3 -m pip install -r requirements-dev.txt")
+        print("error: pyinstaller is not installed. Run: python -m pip install -r requirements-dev.txt")
         return 1
 
     if args.clean:
@@ -39,9 +40,24 @@ def main() -> int:
         print(f"error: missing spec file: {SPEC}")
         return 1
 
-    # Use current interpreter to avoid PATH drift across platforms.
+    # Run PyInstaller from the spec directory to avoid repository-root module shadowing
+    # (for example local `packaging/` masking site-packages `packaging`).
+    dist_path = ROOT / "dist"
+    work_path = ROOT / "build"
+    command = [
+        sys.executable,
+        "-m",
+        "PyInstaller",
+        "--noconfirm",
+        "--clean",
+        "--distpath",
+        str(dist_path),
+        "--workpath",
+        str(work_path),
+        str(SPEC),
+    ]
     try:
-        run([sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", str(SPEC)])
+        run(command, cwd=PYI_WORKDIR)
     except subprocess.CalledProcessError as exc:
         print(f"error: pyinstaller build failed with exit code {exc.returncode}")
         return exc.returncode
