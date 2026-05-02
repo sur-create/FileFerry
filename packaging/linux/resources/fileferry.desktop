@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=FileFerry
+Comment=LAN single-file transfer tool
+Exec=fileferry --help
+Icon=utilities-terminal
+Terminal=true
+Categories=Utility;Network;
+Keywords=file;transfer;lan;tcp;

@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fileferry"
+version = "1.1.0"
+description = "LAN single-file transfer tool"
+readme = "README.md"
+requires-python = ">=3.8"
+authors = [
+  { name = "FileFerry Team" }
+]
+keywords = ["lan", "file-transfer", "tcp", "cli"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Environment :: Console",
+  "Operating System :: OS Independent",
+  "License :: Other/Proprietary License"
+]
+
+[project.scripts]
+fileferry = "fileferry.cli:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["fileferry*"]

@@ -1,0 +1,56 @@
+# FileFerry
+
+基于 TCP 的局域网单文件传输工具（Linux ↔ Windows）。
+
+## 快速开始
+
+1. 启动接收端（示例端口 `9000`）：
+
+```bash
+python3 -m fileferry recv --host 0.0.0.0 --port 9000 --output-dir ./downloads
+```
+
+2. 启动发送端（示例发送 `./demo.txt`）：
+
+```bash
+python3 -m fileferry send --host <接收端IP> --port 9000 --file ./demo.txt
+```
+
+## 运行测试
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+## 打包构建（V1.1）
+
+安装开发依赖：
+
+```bash
+python3 -m pip install -r requirements-dev.txt
+```
+
+构建当前平台安装包：
+
+```bash
+python3 scripts/build_packages.py --clean
+```
+
+产物目录：
+
+- `dist/fileferry/`：自包含可执行目录（PyInstaller）
+- `dist/installer/`：平台安装包
+
+## 文档
+
+- 需求分析：[docs/requirements_analysis.md](docs/requirements_analysis.md)
+- 架构设计：[docs/architecture_design.md](docs/architecture_design.md)
+- 测试报告：[docs/test_report.md](docs/test_report.md)
+- 用户手册：[docs/user_manual.md](docs/user_manual.md)
+- Windows 安装：[docs/install_windows.md](docs/install_windows.md)
+- macOS 安装：[docs/install_macos.md](docs/install_macos.md)
+- Linux 安装：[docs/install_linux.md](docs/install_linux.md)
+- 卸载指南：[docs/uninstall.md](docs/uninstall.md)
+- 安装排障：[docs/troubleshooting_install.md](docs/troubleshooting_install.md)
+- 打包测试报告：[docs/packaging_test_report.md](docs/packaging_test_report.md)
+- 打包说明：[packaging/README.md](packaging/README.md)
