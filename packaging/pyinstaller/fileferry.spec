@@ -39,41 +39,19 @@ COMMON_ANALYSIS_KWARGS = dict(
     noarchive=False,
 )
 
-def _script_toc(scripts, filename):
-    for entry in scripts:
-        if Path(entry[1]).name == filename:
-            return [entry]
-    raise RuntimeError(f"missing script in Analysis.scripts: {filename}")
-
 if sys.platform == "win32":
-    a = Analysis(
-        [str(SPEC_DIR / "entrypoint.py"), str(SPEC_DIR / "desktop_entrypoint.py")],
-        **COMMON_ANALYSIS_KWARGS,
-    )
-    pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+    # GUI entrypoint must be analyzed first so tkinter runtime hooks/data are
+    # present in shared onedir runtime files.
+    a_gui = Analysis([str(SPEC_DIR / "desktop_entrypoint.py")], **COMMON_ANALYSIS_KWARGS)
+    a_cli = Analysis([str(SPEC_DIR / "entrypoint.py")], **COMMON_ANALYSIS_KWARGS)
 
-    cli_exe = EXE(
-        pyz,
-        _script_toc(a.scripts, "entrypoint.py"),
-        [],
-        exclude_binaries=True,
-        name="fileferry-cli",
-        debug=False,
-        bootloader_ignore_signals=False,
-        strip=False,
-        upx=False,
-        upx_exclude=[],
-        runtime_tmpdir=None,
-        console=True,
-        disable_windowed_traceback=False,
-        target_arch=None,
-        codesign_identity=None,
-        entitlements_file=None,
-    )
+    pyz_gui = PYZ(a_gui.pure, a_gui.zipped_data, cipher=block_cipher)
+    pyz_cli = PYZ(a_cli.pure, a_cli.zipped_data, cipher=block_cipher)
 
     gui_exe = EXE(
-        pyz,
-        _script_toc(a.scripts, "desktop_entrypoint.py"),
+        pyz_gui,
+        getattr(a_gui, "dependencies", []),
+        a_gui.scripts,
         [],
         exclude_binaries=True,
         name="fileferry",
@@ -90,12 +68,35 @@ if sys.platform == "win32":
         entitlements_file=None,
     )
 
+    cli_exe = EXE(
+        pyz_cli,
+        getattr(a_cli, "dependencies", []),
+        a_cli.scripts,
+        [],
+        exclude_binaries=True,
+        name="fileferry-cli",
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=False,
+        upx_exclude=[],
+        runtime_tmpdir=None,
+        console=True,
+        disable_windowed_traceback=False,
+        target_arch=None,
+        codesign_identity=None,
+        entitlements_file=None,
+    )
+
     coll = COLLECT(
-        cli_exe,
         gui_exe,
-        a.binaries,
-        a.zipfiles,
-        a.datas,
+        cli_exe,
+        a_cli.binaries,
+        a_gui.binaries,
+        a_cli.zipfiles,
+        a_gui.zipfiles,
+        a_cli.datas,
+        a_gui.datas,
         strip=False,
         upx=False,
         upx_exclude=[],
