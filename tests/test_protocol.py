@@ -2,10 +2,20 @@ from __future__ import annotations
 
 import socket
 import struct
+import tempfile
 import unittest
+from pathlib import Path
 
 from fileferry.errors import ProtocolError
-from fileferry.protocol import FileMetadata, decode_header, encode_header, recv_exact, sanitize_filename
+from fileferry.protocol import (
+    FileMetadata,
+    decode_header,
+    encode_header,
+    recv_exact,
+    resolve_relative_output_path,
+    sanitize_filename,
+    sanitize_relative_path,
+)
 
 
 class ProtocolTests(unittest.TestCase):
@@ -26,6 +36,10 @@ class ProtocolTests(unittest.TestCase):
             sanitize_filename("../a.txt")
         with self.assertRaises(ProtocolError):
             sanitize_filename("folder\\a.txt")
+        with self.assertRaises(ProtocolError):
+            sanitize_relative_path("../a.txt")
+        with self.assertRaises(ProtocolError):
+            sanitize_relative_path("/a.txt")
 
     def test_recv_exact_raises_on_disconnect(self) -> None:
         left, right = socket.socketpair()
@@ -36,6 +50,16 @@ class ProtocolTests(unittest.TestCase):
         left.close()
         with self.assertRaises(ProtocolError):
             recv_exact(right, 4)
+
+    def test_resolve_relative_output_path_rejects_escape(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            self.assertEqual(
+                resolve_relative_output_path(root, "a/b.txt"),
+                root / "a" / "b.txt",
+            )
+            with self.assertRaises(ProtocolError):
+                resolve_relative_output_path(root, "../b.txt")
 
 
 if __name__ == "__main__":

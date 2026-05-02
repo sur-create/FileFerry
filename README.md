@@ -1,6 +1,6 @@
 # FileFerry
 
-基于 TCP 的局域网单文件传输工具（Linux ↔ Windows）。
+基于 TCP 的局域网文件传输工具（Linux ↔ Windows），支持单文件、多文件与目录递归传输。
 
 ## 快速开始
 
@@ -10,7 +10,15 @@
 python3 -m fileferry recv --host 0.0.0.0 --port 9000 --output-dir ./downloads
 ```
 
-2. 启动发送端（示例发送 `./demo.txt`）：
+2. 启动发送端（示例发送目录 + 文件）：
+
+```bash
+python3 -m fileferry send --host <接收端IP> --port 9000 \
+  --src ./project \
+  --src ./notes.txt
+```
+
+兼容旧命令（单文件）：
 
 ```bash
 python3 -m fileferry send --host <接收端IP> --port 9000 --file ./demo.txt
@@ -44,6 +52,7 @@ python3 scripts/build_packages.py --clean
 ## 文档
 
 - 需求分析：[docs/requirements_analysis.md](docs/requirements_analysis.md)
+- V1.2 需求：[docs/requirements_v1.2.md](docs/requirements_v1.2.md)
 - 架构设计：[docs/architecture_design.md](docs/architecture_design.md)
 - 测试报告：[docs/test_report.md](docs/test_report.md)
 - 用户手册：[docs/user_manual.md](docs/user_manual.md)

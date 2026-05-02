@@ -19,7 +19,7 @@
 
 ## 3. 功能回归测试
 
-- `python3 -m unittest discover -s tests -v`：7/7 通过（在允许 socket 权限下）。
+- `python3 -m unittest discover -s tests -v`：11/11 通过（在允许 socket 权限下）。
 
 ## 4. 待在 CI/目标平台验证
 
