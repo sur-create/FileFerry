@@ -26,15 +26,20 @@
 | Integration | `test_library_multi_source_recursive_and_mtime` | 校验多源递归传输与 mtime 保留 |
 | Integration | `test_conflict_rename_policy` | 校验 `rename` 冲突策略 |
 | Integration | `test_conflict_skip_policy` | 校验 `skip` 冲突策略 |
+| Integration | `test_sender_policy_overrides_receiver_default` | 校验发送端会话策略可覆盖接收端默认策略 |
 | System | `test_cli_end_to_end_multi_source` | 校验 CLI 多源传输成功 |
 
 ## 4. 执行结果
 
 - 执行时间：2026-05-02
 - 命令输出摘要：
-  - `Ran 11 tests in 2.165s`
+  - `Ran 12 tests in 2.410s`
   - `OK`
 
 ## 5. 结论
 
-当前实现满足 V1.2 目标：多文件/目录递归传输、冲突策略、失败继续与 mtime 保留，并保持 `--file` 单文件兼容链路可用。
+当前实现满足 V1.3 迭代的核心目标：保留 V1.2 多源传输能力（多文件/目录递归、冲突策略、失败继续、mtime）并新增 GUI 代码路径。
+
+补充说明：
+
+- GUI（V1.3）功能未纳入自动化 Qt 界面测试；核心传输行为通过库/CLI 回归测试覆盖。

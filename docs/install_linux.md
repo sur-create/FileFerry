@@ -20,14 +20,17 @@ sudo dnf install ./fileferry-<version>-1.<arch>.rpm
 
 ## 3. 安装后路径
 
-- 程序目录：`/opt/fileferry`
+- CLI 程序目录：`/opt/fileferry`
+- GUI 程序目录：`/opt/fileferry-gui`
 - 命令入口：`/usr/bin/fileferry`
+- GUI 启动命令：`/usr/bin/fileferry-gui`
 - 菜单项：`/usr/share/applications/fileferry.desktop`
 
 ## 4. 验证安装
 
 ```bash
 fileferry --help
+fileferry-gui
 ```
 
 ## 5. 常见安装错误

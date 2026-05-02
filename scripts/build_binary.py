@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build standalone FileFerry binary with PyInstaller."""
+"""Build standalone FileFerry binaries with PyInstaller."""
 
 from __future__ import annotations
 
@@ -11,8 +11,10 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SPEC = ROOT / "packaging" / "pyinstaller" / "fileferry.spec"
-PYI_WORKDIR = SPEC.parent
+SPECS = {
+    "cli": ROOT / "packaging" / "pyinstaller" / "fileferry.spec",
+    "gui": ROOT / "packaging" / "pyinstaller" / "fileferry_gui.spec",
+}
 
 
 def run(command: list[str], *, cwd: Path | None = None) -> None:
@@ -20,9 +22,34 @@ def run(command: list[str], *, cwd: Path | None = None) -> None:
     subprocess.run(command, cwd=cwd or ROOT, check=True)
 
 
+def _build_spec(spec: Path) -> None:
+    spec_workdir = spec.parent
+    dist_path = ROOT / "dist"
+    work_path = ROOT / "build"
+    command = [
+        sys.executable,
+        "-m",
+        "PyInstaller",
+        "--noconfirm",
+        "--clean",
+        "--distpath",
+        str(dist_path),
+        "--workpath",
+        str(work_path),
+        str(spec),
+    ]
+    run(command, cwd=spec_workdir)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Build standalone binaries with PyInstaller")
     parser.add_argument("--clean", action="store_true", help="remove build/dist before building")
+    parser.add_argument(
+        "--target",
+        choices=["all", "cli", "gui"],
+        default="all",
+        help="binary target to build",
+    )
     args = parser.parse_args()
 
     if importlib.util.find_spec("PyInstaller") is None:
@@ -36,32 +63,22 @@ def main() -> int:
                 print(f"remove {target}")
                 shutil.rmtree(target)
 
-    if not SPEC.exists():
-        print(f"error: missing spec file: {SPEC}")
-        return 1
+    targets = ["cli", "gui"] if args.target == "all" else [args.target]
+    specs = [SPECS[item] for item in targets]
 
-    # Run PyInstaller from the spec directory to avoid repository-root module shadowing
-    # (for example local `packaging/` masking site-packages `packaging`).
-    dist_path = ROOT / "dist"
-    work_path = ROOT / "build"
-    command = [
-        sys.executable,
-        "-m",
-        "PyInstaller",
-        "--noconfirm",
-        "--clean",
-        "--distpath",
-        str(dist_path),
-        "--workpath",
-        str(work_path),
-        str(SPEC),
-    ]
-    try:
-        run(command, cwd=PYI_WORKDIR)
-    except subprocess.CalledProcessError as exc:
-        print(f"error: pyinstaller build failed with exit code {exc.returncode}")
-        return exc.returncode
-    print("build complete: dist/fileferry")
+    for spec in specs:
+        if not spec.exists():
+            print(f"error: missing spec file: {spec}")
+            return 1
+
+        try:
+            _build_spec(spec)
+        except subprocess.CalledProcessError as exc:
+            print(f"error: pyinstaller build failed with exit code {exc.returncode}")
+            return exc.returncode
+
+    built = ", ".join(f"dist/{spec.stem.replace('_', '-')}" for spec in specs)
+    print(f"build complete: {built}")
     return 0
 
 

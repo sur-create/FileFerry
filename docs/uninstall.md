@@ -14,6 +14,7 @@
 
 1. 删除 `/Applications/FileFerry.app`。
 2. 删除 `/usr/local/bin/fileferry`。
+3. 删除 `/usr/local/share/fileferry`（可选，包含卸载脚本）。
 
 如需一次性清理：
 

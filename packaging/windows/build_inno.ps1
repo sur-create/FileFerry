@@ -30,8 +30,8 @@ if (-not $Version) {
     $Version = Get-Version
 }
 
-if (-not (Test-Path "dist/fileferry/fileferry.exe")) {
-    Write-Host "dist/fileferry missing. building PyInstaller binary..."
+if (-not (Test-Path "dist/fileferry/fileferry.exe") -or -not (Test-Path "dist/fileferry-gui/fileferry-gui.exe")) {
+    Write-Host "dist/fileferry or dist/fileferry-gui missing. building PyInstaller binaries..."
     python scripts/build_binary.py --clean
 }
 

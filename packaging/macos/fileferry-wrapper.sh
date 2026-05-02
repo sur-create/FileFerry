@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_BIN="/Applications/FileFerry.app/Contents/Resources/runtime/fileferry"
+APP_BIN="/Applications/FileFerry.app/Contents/Resources/runtime_cli/fileferry"
 
 if [[ ! -x "$APP_BIN" ]]; then
   echo "error: FileFerry runtime not found at $APP_BIN" >&2

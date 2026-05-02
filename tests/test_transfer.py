@@ -222,6 +222,44 @@ class TransferTests(unittest.TestCase):
             self.assertEqual(recv_result.skipped_entries, 1)
             self.assertEqual(existing.read_text("utf-8"), "existing")
 
+    def test_sender_policy_overrides_receiver_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            src_file = root / "same.txt"
+            src_file.write_text("incoming", encoding="utf-8")
+
+            output_dir = root / "recv"
+            output_dir.mkdir()
+            existing = output_dir / "same.txt"
+            existing.write_text("existing", encoding="utf-8")
+
+            port = get_free_port()
+            # Receiver defaults to overwrite, sender asks skip through session_start.
+            thread, errors, state = self._run_receiver_session(port, output_dir, conflict_policy="overwrite")
+
+            sent = send_session(
+                SessionSenderConfig(
+                    host="127.0.0.1",
+                    port=port,
+                    sources=[src_file],
+                    timeout=10.0,
+                    conflict_policy="skip",
+                    continue_on_error=True,
+                )
+            )
+            thread.join(timeout=10.0)
+
+            self.assertFalse(thread.is_alive(), "receiver thread did not finish in time")
+            if errors:
+                raise errors[0]
+
+            recv_result = state["result"]
+            self.assertEqual(sent.failed_entries, 0)
+            self.assertEqual(recv_result.failed_entries, 0)
+            self.assertEqual(sent.skipped_entries, 1)
+            self.assertEqual(recv_result.skipped_entries, 1)
+            self.assertEqual(existing.read_text("utf-8"), "existing")
+
     def test_cli_end_to_end_multi_source(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)

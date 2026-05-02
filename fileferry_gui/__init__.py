@@ -1,4 +1,4 @@
-"""FileFerry - LAN file transfer tool."""
+"""FileFerry GUI package."""
 
 __all__ = ["__version__"]
 __version__ = "1.3.0"

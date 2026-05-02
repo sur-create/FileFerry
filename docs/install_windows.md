@@ -21,7 +21,7 @@
 2. 如需验证命令行，在命令提示符执行（默认安装路径）：
 
 ```bat
-"%ProgramFiles%\\FileFerry\\fileferry-cli.exe" --help
+"%ProgramFiles%\\FileFerry\\cli\\fileferry.exe" --help
 ```
 
 若显示帮助信息即安装成功。
@@ -30,4 +30,4 @@
 
 - `Permission denied`：请右键“以管理员身份运行”安装程序。
 - `Windows Defender SmartScreen` 提示：选择“更多信息 -> 仍要运行”（内网环境使用）。
-- 安装后命令不可用：重新打开终端，或确认安装目录中存在 `fileferry-cli.exe`。
+- 安装后命令不可用：重新打开终端，或确认安装目录中存在 `cli\\fileferry.exe`。
