@@ -5,6 +5,7 @@
 #define MyAppName "FileFerry"
 #define MyAppPublisher "FileFerry Team"
 #define MyAppExeName "fileferry.exe"
+#define MyAppCliExeName "fileferry-cli.exe"
 
 [Setup]
 AppId={{A0F8C53B-74E0-4FF7-ACD8-4D2E30339FCE}}
@@ -36,10 +37,11 @@ Source: "fileferry-send.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "fileferry-recv.bat"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\FileFerry\FileFerry Help"; Filename: "{cmd}"; Parameters: "/k ""{app}\fileferry.exe"" --help"; WorkingDir: "{app}"
-Name: "{autoprograms}\FileFerry\FileFerry Send"; Filename: "{cmd}"; Parameters: "/k ""{app}\fileferry-send.bat"""; WorkingDir: "{app}"
-Name: "{autoprograms}\FileFerry\FileFerry Receive"; Filename: "{cmd}"; Parameters: "/k ""{app}\fileferry-recv.bat"""; WorkingDir: "{app}"
-Name: "{autodesktop}\FileFerry"; Filename: "{cmd}"; Parameters: "/k ""{app}\fileferry.exe"" --help"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autoprograms}\FileFerry\FileFerry"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
+Name: "{autoprograms}\FileFerry\FileFerry Help (CLI)"; Filename: "{cmd}"; Parameters: "/k ""{app}\{#MyAppCliExeName}"" --help"; WorkingDir: "{app}"
+Name: "{autoprograms}\FileFerry\FileFerry Send (CLI)"; Filename: "{cmd}"; Parameters: "/k ""{app}\fileferry-send.bat"""; WorkingDir: "{app}"
+Name: "{autoprograms}\FileFerry\FileFerry Receive (CLI)"; Filename: "{cmd}"; Parameters: "/k ""{app}\fileferry-recv.bat"""; WorkingDir: "{app}"
+Name: "{autodesktop}\FileFerry"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
-Filename: "{cmd}"; Parameters: "/k ""{app}\fileferry.exe"" --help"; Description: "Open FileFerry command help"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "Launch FileFerry desktop app"; Flags: nowait postinstall skipifsilent
