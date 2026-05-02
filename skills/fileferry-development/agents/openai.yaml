@@ -1,0 +1,7 @@
+interface:
+  display_name: "FileFerry 开发规范"
+  short_description: "按项目规范执行 FileFerry 迭代开发与交付"
+  default_prompt: "Use $fileferry-development to implement this FileFerry change on a new branch with full tests and doc sync."
+
+policy:
+  allow_implicit_invocation: true
