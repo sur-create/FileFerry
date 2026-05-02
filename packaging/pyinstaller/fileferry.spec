@@ -2,8 +2,23 @@
 from pathlib import Path
 
 block_cipher = None
-SPEC_DIR = Path(__file__).resolve().parent
-ROOT = SPEC_DIR.parents[1]
+_SPEC_FILE = globals().get("SPEC")
+if _SPEC_FILE:
+    SPEC_DIR = Path(_SPEC_FILE).resolve().parent
+else:
+    _cwd = Path.cwd().resolve()
+    if (_cwd / "entrypoint.py").exists():
+        SPEC_DIR = _cwd
+    elif (_cwd / "packaging" / "pyinstaller" / "entrypoint.py").exists():
+        SPEC_DIR = _cwd / "packaging" / "pyinstaller"
+    else:
+        SPEC_DIR = _cwd
+for _candidate in (SPEC_DIR, *SPEC_DIR.parents):
+    if (_candidate / "pyproject.toml").exists():
+        ROOT = _candidate
+        break
+else:
+    ROOT = SPEC_DIR.parents[1]
 
 a = Analysis(
     [str(SPEC_DIR / 'entrypoint.py')],
