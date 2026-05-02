@@ -1,2 +1,2 @@
 @echo off
-"%~dp0fileferry-cli.exe" send %*
+"%~dp0cli\fileferry.exe" send %*

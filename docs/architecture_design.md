@@ -5,6 +5,7 @@
 本项目采用分层式命令行应用架构：
 
 - 表现层：`fileferry/cli.py`
+- GUI 表现层：`fileferry_gui/main_window.py`
 - 业务层：`fileferry/sender.py`、`fileferry/receiver.py`
 - 协议层：`fileferry/protocol.py`
 - 异常层：`fileferry/errors.py`
@@ -28,6 +29,10 @@ FileFerry/
 │   ├── protocol.py
 │   ├── receiver.py
 │   └── sender.py
+├── fileferry_gui/
+│   ├── app.py
+│   ├── main_window.py
+│   └── workers.py
 ├── packaging/
 │   ├── pyinstaller/
 │   ├── windows/
@@ -98,6 +103,7 @@ python3 -m fileferry recv --host 0.0.0.0 --port <PORT> \
 - `sender.send_session(SessionSenderConfig) -> SendSessionResult`
 - `receiver.receive_session(ReceiverConfig) -> ReceiveSessionResult`
 - 兼容接口：`sender.send_file(SenderConfig)`、`receiver.receive_once(ReceiverConfig)`
+- GUI 入口：`fileferry_gui.app:main`（`fileferry-gui` 命令）
 
 ## 5. 数据建模
 
@@ -166,3 +172,13 @@ CLI 统一捕获并输出 `error: <detail>`，返回非零退出码。
 - Windows：控制面板/设置中标准卸载（Inno 自动注册）。
 - macOS：提供卸载脚本 `/usr/local/share/fileferry/uninstall_fileferry.sh`。
 - Linux：通过包管理器标准卸载（`apt remove` / `dnf remove`）。
+
+## 10. GUI 架构（V1.3）
+
+- 窗口层：`MainWindow` 负责中文 UI、状态展示、按钮交互。
+- 后台线程：
+  - `SendSessionWorker`：异步发送会话，避免阻塞界面。
+  - `ReceiverServerWorker`：持续监听，支持手动开启/断开连接。
+- 连接控制：
+  - 发送端：手动“开启连接/断开连接”（连接可达性检查 + 状态门控）。
+  - 接收端：手动开启监听与关闭监听，监听周期内可处理多次会话。

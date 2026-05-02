@@ -1,8 +1,8 @@
 # Packaging Guide
 
-FileFerry V1.1 打包采用“两层构建”模式：
+FileFerry V1.3 打包采用“两层构建”模式：
 
-1. `PyInstaller` 先构建自包含运行目录（`dist/fileferry`）。
+1. `PyInstaller` 先构建自包含运行目录（CLI: `dist/fileferry`，GUI: `dist/fileferry-gui`）。
 2. 每个平台再构建原生安装包（输出到 `dist/installer`）。
 
 ## 快速命令
@@ -17,6 +17,13 @@ python3 -m pip install -r requirements-dev.txt
 
 ```bash
 python3 scripts/build_binary.py --clean
+```
+
+- 仅构建 CLI 或 GUI：
+
+```bash
+python3 scripts/build_binary.py --target cli
+python3 scripts/build_binary.py --target gui
 ```
 
 - 构建当前平台安装包：
@@ -40,5 +47,6 @@ python3 scripts/build_packages.py --clean
 
 ## 产物目录
 
-- `dist/fileferry/`：PyInstaller 产物
+- `dist/fileferry/`：CLI 产物
+- `dist/fileferry-gui/`：GUI 产物
 - `dist/installer/`：安装包产物

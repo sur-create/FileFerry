@@ -4,8 +4,8 @@
 
 #define MyAppName "FileFerry"
 #define MyAppPublisher "FileFerry Team"
-#define MyAppExeName "fileferry.exe"
-#define MyAppCliExeName "fileferry-cli.exe"
+#define MyAppExeName "fileferry-gui.exe"
+#define MyAppCliExeName "fileferry.exe"
 
 [Setup]
 AppId={{A0F8C53B-74E0-4FF7-ACD8-4D2E30339FCE}}
@@ -32,16 +32,17 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "Create desktop shortcuts"; GroupDescription: "Additional icons:"; Flags: unchecked
 
 [Files]
-Source: "..\..\dist\fileferry\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\..\dist\fileferry\*"; DestDir: "{app}\cli"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\..\dist\fileferry-gui\*"; DestDir: "{app}\gui"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "fileferry-send.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "fileferry-recv.bat"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\FileFerry\FileFerry"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
-Name: "{autoprograms}\FileFerry\FileFerry Help (CLI)"; Filename: "{cmd}"; Parameters: "/k ""{app}\{#MyAppCliExeName}"" --help"; WorkingDir: "{app}"
+Name: "{autoprograms}\FileFerry\FileFerry"; Filename: "{app}\gui\{#MyAppExeName}"; WorkingDir: "{app}\gui"
+Name: "{autoprograms}\FileFerry\FileFerry Help (CLI)"; Filename: "{cmd}"; Parameters: "/k ""{app}\cli\{#MyAppCliExeName}"" --help"; WorkingDir: "{app}"
 Name: "{autoprograms}\FileFerry\FileFerry Send (CLI)"; Filename: "{cmd}"; Parameters: "/k ""{app}\fileferry-send.bat"""; WorkingDir: "{app}"
 Name: "{autoprograms}\FileFerry\FileFerry Receive (CLI)"; Filename: "{cmd}"; Parameters: "/k ""{app}\fileferry-recv.bat"""; WorkingDir: "{app}"
-Name: "{autodesktop}\FileFerry"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autodesktop}\FileFerry"; Filename: "{app}\gui\{#MyAppExeName}"; WorkingDir: "{app}\gui"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Launch FileFerry desktop app"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\gui\{#MyAppExeName}"; Description: "Launch FileFerry desktop app"; Flags: nowait postinstall skipifsilent

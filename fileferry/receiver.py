@@ -232,11 +232,155 @@ def _send_entry_result(conn: socket.socket, result: EntryReceiveResult) -> None:
     )
 
 
+def _resolve_session_policy(
+    config: ReceiverConfig,
+    start_frame: dict,
+) -> Tuple[str, bool]:
+    policy = config.conflict_policy
+    frame_policy = start_frame.get("conflict_policy")
+    if isinstance(frame_policy, str) and frame_policy in VALID_CONFLICT_POLICIES:
+        policy = frame_policy
+
+    continue_on_error = config.continue_on_error
+    frame_continue = start_frame.get("continue_on_error")
+    if isinstance(frame_continue, bool):
+        continue_on_error = frame_continue
+
+    return policy, continue_on_error
+
+
+def receive_session_from_connection(
+    conn: socket.socket,
+    addr: Tuple[str, int],
+    config: ReceiverConfig,
+) -> ReceiveSessionResult:
+    start = time.perf_counter()
+    if config.timeout is not None:
+        conn.settimeout(config.timeout)
+
+    start_frame = recv_frame_header(conn)
+    if start_frame.get("type") != "session_start":
+        raise ProtocolError("first frame must be session_start")
+    if payload_size_from_header(start_frame) != 0:
+        raise ProtocolError("session_start payload_size must be zero")
+
+    protocol_version = start_frame.get("protocol_version")
+    if protocol_version not in {"1.1", PROTOCOL_VERSION, "1.2"}:
+        raise ProtocolError(f"unsupported protocol_version: {protocol_version}")
+
+    effective_policy, effective_continue = _resolve_session_policy(config, start_frame)
+    entry_config = ReceiverConfig(
+        host=config.host,
+        port=config.port,
+        output_dir=config.output_dir,
+        timeout=config.timeout,
+        chunk_size=config.chunk_size,
+        conflict_policy=effective_policy,
+        continue_on_error=effective_continue,
+    )
+
+    results: List[EntryReceiveResult] = []
+    total_bytes = 0
+
+    while True:
+        header = recv_frame_header(conn)
+        frame_type = header.get("type")
+
+        if frame_type == "session_end":
+            if payload_size_from_header(header) != 0:
+                raise ProtocolError("session_end payload_size must be zero")
+            break
+
+        if frame_type == "entry_dir":
+            payload_size = payload_size_from_header(header)
+            if payload_size != 0:
+                raise ProtocolError("entry_dir payload_size must be zero")
+
+            relative_path = header.get("relative_path")
+            if not isinstance(relative_path, str):
+                raise ProtocolError("entry_dir.relative_path must be a string")
+            relative_path = sanitize_relative_path(relative_path)
+
+            result = _process_dir_entry(entry_config, relative_path)
+            results.append(result)
+            _send_entry_result(conn, result)
+
+            if result.status == "error" and not entry_config.continue_on_error:
+                break
+            continue
+
+        if frame_type == "entry_file":
+            payload_size = payload_size_from_header(header)
+            relative_path = header.get("relative_path")
+            if not isinstance(relative_path, str):
+                raise ProtocolError("entry_file.relative_path must be a string")
+            relative_path = sanitize_relative_path(relative_path)
+
+            raw_mtime = header.get("mtime")
+            mtime: Optional[int]
+            if raw_mtime is None:
+                mtime = None
+            elif isinstance(raw_mtime, int) and raw_mtime >= 0:
+                mtime = raw_mtime
+            else:
+                recv_payload_discard(conn, payload_size, entry_config.chunk_size)
+                result = EntryReceiveResult(
+                    relative_path=relative_path,
+                    kind="file",
+                    status="error",
+                    detail="entry_file.mtime must be a non-negative integer",
+                    received_bytes=payload_size,
+                )
+                results.append(result)
+                _send_entry_result(conn, result)
+                if not entry_config.continue_on_error:
+                    break
+                continue
+
+            result = _process_file_entry(conn, entry_config, relative_path, payload_size, mtime)
+            results.append(result)
+            total_bytes += result.received_bytes
+            _send_entry_result(conn, result)
+
+            if result.status == "error" and not entry_config.continue_on_error:
+                break
+            continue
+
+        raise ProtocolError(f"unsupported frame type: {frame_type}")
+
+    send_frame_header(
+        conn,
+        {
+            "type": "session_result",
+            "payload_size": 0,
+            "total_entries": len(results),
+            "failed_entries": sum(1 for result in results if result.status == "error"),
+        },
+    )
+
+    elapsed = time.perf_counter() - start
+    successful_entries = sum(1 for result in results if result.status in {"success", "renamed"})
+    skipped_entries = sum(1 for result in results if result.status == "skipped")
+    failed_entries = sum(1 for result in results if result.status == "error")
+    renamed_entries = sum(1 for result in results if result.status == "renamed")
+
+    return ReceiveSessionResult(
+        peer_host=addr[0],
+        peer_port=addr[1],
+        total_entries=len(results),
+        successful_entries=successful_entries,
+        failed_entries=failed_entries,
+        skipped_entries=skipped_entries,
+        renamed_entries=renamed_entries,
+        total_bytes_received=total_bytes,
+        elapsed_seconds=elapsed,
+        entry_results=tuple(results),
+    )
+
+
 def receive_session(config: ReceiverConfig) -> ReceiveSessionResult:
     _validate_config(config)
     config.output_dir.mkdir(parents=True, exist_ok=True)
-
-    start = time.perf_counter()
 
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
@@ -245,118 +389,7 @@ def receive_session(config: ReceiverConfig) -> ReceiveSessionResult:
             server.listen(1)
             conn, addr = server.accept()
             with conn:
-                if config.timeout is not None:
-                    conn.settimeout(config.timeout)
-
-                start_frame = recv_frame_header(conn)
-                if start_frame.get("type") != "session_start":
-                    raise ProtocolError("first frame must be session_start")
-                if payload_size_from_header(start_frame) != 0:
-                    raise ProtocolError("session_start payload_size must be zero")
-
-                protocol_version = start_frame.get("protocol_version")
-                if protocol_version not in {"1.1", PROTOCOL_VERSION, "1.2"}:
-                    raise ProtocolError(f"unsupported protocol_version: {protocol_version}")
-
-                results: List[EntryReceiveResult] = []
-                total_bytes = 0
-
-                while True:
-                    header = recv_frame_header(conn)
-                    frame_type = header.get("type")
-
-                    if frame_type == "session_end":
-                        if payload_size_from_header(header) != 0:
-                            raise ProtocolError("session_end payload_size must be zero")
-                        break
-
-                    if frame_type == "entry_dir":
-                        payload_size = payload_size_from_header(header)
-                        if payload_size != 0:
-                            raise ProtocolError("entry_dir payload_size must be zero")
-
-                        relative_path = header.get("relative_path")
-                        if not isinstance(relative_path, str):
-                            raise ProtocolError("entry_dir.relative_path must be a string")
-                        relative_path = sanitize_relative_path(relative_path)
-
-                        result = _process_dir_entry(config, relative_path)
-                        results.append(result)
-                        _send_entry_result(conn, result)
-
-                        if result.status == "error" and not config.continue_on_error:
-                            break
-                        continue
-
-                    if frame_type == "entry_file":
-                        payload_size = payload_size_from_header(header)
-                        relative_path = header.get("relative_path")
-                        if not isinstance(relative_path, str):
-                            raise ProtocolError("entry_file.relative_path must be a string")
-                        relative_path = sanitize_relative_path(relative_path)
-
-                        raw_mtime = header.get("mtime")
-                        mtime: Optional[int]
-                        if raw_mtime is None:
-                            mtime = None
-                        elif isinstance(raw_mtime, int) and raw_mtime >= 0:
-                            mtime = raw_mtime
-                        else:
-                            recv_payload_discard(conn, payload_size, config.chunk_size)
-                            result = EntryReceiveResult(
-                                relative_path=relative_path,
-                                kind="file",
-                                status="error",
-                                detail="entry_file.mtime must be a non-negative integer",
-                                received_bytes=payload_size,
-                            )
-                            results.append(result)
-                            _send_entry_result(conn, result)
-                            if not config.continue_on_error:
-                                break
-                            continue
-
-                        result = _process_file_entry(conn, config, relative_path, payload_size, mtime)
-                        results.append(result)
-                        total_bytes += result.received_bytes
-                        _send_entry_result(conn, result)
-
-                        if result.status == "error" and not config.continue_on_error:
-                            break
-                        continue
-
-                    raise ProtocolError(f"unsupported frame type: {frame_type}")
-
-                send_frame_header(
-                    conn,
-                    {
-                        "type": "session_result",
-                        "payload_size": 0,
-                        "total_entries": len(results),
-                        "failed_entries": sum(1 for result in results if result.status == "error"),
-                    },
-                )
-
-                elapsed = time.perf_counter() - start
-                successful_entries = sum(
-                    1 for result in results if result.status in {"success", "renamed"}
-                )
-                skipped_entries = sum(1 for result in results if result.status == "skipped")
-                failed_entries = sum(1 for result in results if result.status == "error")
-                renamed_entries = sum(1 for result in results if result.status == "renamed")
-
-                return ReceiveSessionResult(
-                    peer_host=addr[0],
-                    peer_port=addr[1],
-                    total_entries=len(results),
-                    successful_entries=successful_entries,
-                    failed_entries=failed_entries,
-                    skipped_entries=skipped_entries,
-                    renamed_entries=renamed_entries,
-                    total_bytes_received=total_bytes,
-                    elapsed_seconds=elapsed,
-                    entry_results=tuple(results),
-                )
+                return receive_session_from_connection(conn, addr, config)
     except OSError as exc:
         raise NetworkError(f"failed to receive file: {exc}") from exc
 

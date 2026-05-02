@@ -20,7 +20,7 @@
 fileferry --help
 ```
 
-也可在 `Applications` 中打开 `FileFerry.app` 查看命令帮助入口。
+也可在 `Applications` 中打开 `FileFerry.app` 启动图形界面。
 
 ## 4. 常见安装错误
 

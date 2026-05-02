@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DIST_BIN_DIR="$ROOT_DIR/dist/fileferry"
+DIST_GUI_DIR="$ROOT_DIR/dist/fileferry-gui"
 INSTALLER_DIR="$ROOT_DIR/dist/installer"
 BUILD_DIR="$ROOT_DIR/build/macos"
 APP_BUNDLE="$BUILD_DIR/FileFerry.app"
@@ -22,41 +23,33 @@ need_tool() {
 need_tool python3
 need_tool pkgbuild
 need_tool productbuild
-need_tool osascript
 
-if [[ ! -d "$DIST_BIN_DIR" ]]; then
-  echo "dist/fileferry missing. building binary first..."
+if [[ ! -d "$DIST_BIN_DIR" || ! -d "$DIST_GUI_DIR" ]]; then
+  echo "dist/fileferry or dist/fileferry-gui missing. building binaries first..."
   python3 "$ROOT_DIR/scripts/build_binary.py" --clean
 fi
 
 VERSION="$(python3 -c 'from fileferry import __version__; print(__version__)')"
 
 rm -rf "$BUILD_DIR"
-mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources/runtime" "$PKG_ROOT/Applications" "$PKG_ROOT/usr/local/bin" "$PKG_ROOT/usr/local/share/fileferry" "$INSTALLER_DIR"
+mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources/runtime_gui" "$APP_BUNDLE/Contents/Resources/runtime_cli" "$PKG_ROOT/Applications" "$PKG_ROOT/usr/local/bin" "$PKG_ROOT/usr/local/share/fileferry" "$INSTALLER_DIR"
 
-cp -a "$DIST_BIN_DIR/." "$APP_BUNDLE/Contents/Resources/runtime/"
+cp -a "$DIST_GUI_DIR/." "$APP_BUNDLE/Contents/Resources/runtime_gui/"
+cp -a "$DIST_BIN_DIR/." "$APP_BUNDLE/Contents/Resources/runtime_cli/"
 
 cat > "$APP_BUNDLE/Contents/MacOS/FileFerry" <<'LAUNCHER'
 #!/usr/bin/env bash
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-RUNTIME_BIN="$SCRIPT_DIR/../Resources/runtime/fileferry"
+RUNTIME_BIN="$SCRIPT_DIR/../Resources/runtime_gui/fileferry-gui"
 
 if [[ ! -x "$RUNTIME_BIN" ]]; then
-  osascript -e 'display alert "FileFerry runtime not found" message "Please reinstall FileFerry."'
+  echo "FileFerry GUI runtime not found. Please reinstall FileFerry."
   exit 1
 fi
 
-CMD="$RUNTIME_BIN --help"
-osascript - "$CMD" <<'APPLESCRIPT'
-on run argv
-  tell application "Terminal"
-    activate
-    do script (item 1 of argv)
-  end tell
-end run
-APPLESCRIPT
+exec "$RUNTIME_BIN" "$@"
 LAUNCHER
 chmod +x "$APP_BUNDLE/Contents/MacOS/FileFerry"
 

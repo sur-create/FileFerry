@@ -5,26 +5,15 @@
 - Python 3.8+
 - Linux / macOS / Windows（同一局域网可互通）
 
-## 2. 启动接收端
+## 2. CLI 使用
+
+### 2.1 启动接收端
 
 ```bash
 python3 -m fileferry recv --host 0.0.0.0 --port 9000 --output-dir ./downloads
 ```
 
-参数说明：
-
-- `--host`：监听 IP，默认 `0.0.0.0`
-- `--port`：监听端口（必填）
-- `--output-dir`：保存目录（不填时优先使用命令入口目录；若不可写则回退到当前工作目录）
-- `--conflict`：冲突策略，`overwrite|skip|rename`，默认 `overwrite`
-- `--continue-on-error`：条目失败后继续（默认）
-- `--fail-fast`：遇到首个失败立即停止
-- `--timeout`：连接读写超时（秒）
-- `--chunk-size`：每次接收块大小（字节）
-
-## 3. 启动发送端
-
-### 3.1 多文件/目录传输（V1.2）
+### 2.2 启动发送端（多源）
 
 ```bash
 python3 -m fileferry send --host 192.168.1.10 --port 9000 \
@@ -32,40 +21,46 @@ python3 -m fileferry send --host 192.168.1.10 --port 9000 \
   --src ./docs/readme.txt
 ```
 
-### 3.2 单文件兼容模式
+### 2.3 单文件兼容模式
 
 ```bash
 python3 -m fileferry send --host 192.168.1.10 --port 9000 --file ./demo.txt
 ```
 
-参数说明：
+## 3. GUI 使用（V1.3）
 
-- `--host`：接收端 IP（必填）
-- `--port`：接收端端口（必填）
-- `--src`：源路径，可重复传多个（文件或目录）
-- `--file`：单文件兼容参数（与 `--src` 互斥）
-- `--conflict`：冲突策略，`overwrite|skip|rename`，默认 `overwrite`
-- `--continue-on-error`：条目失败后继续（默认）
-- `--fail-fast`：遇到首个失败立即停止
-- `--timeout`：连接超时（秒）
-- `--chunk-size`：每次发送块大小（字节）
+### 3.1 安装与启动
 
-## 4. 典型流程
+```bash
+python3 -m pip install ".[gui]"
+python3 -m fileferry_gui.app
+```
 
-1. 在目标机器运行 `recv` 命令并保持进程等待。
-2. 在源机器运行 `send` 命令发送目录/文件。
-3. 双方命令行显示会话摘要（总数、成功、失败、字节数、耗时）。
+### 3.2 发送端操作
 
-## 5. 常见错误
+1. 在“发送端”页签填写目标 IP 和端口。
+2. 点击“开启连接”，状态变为“已连接”。
+3. 添加文件或文件夹。
+4. 设置冲突策略与失败策略。
+5. 点击“开始发送”。
+6. 如需手动关闭，点击“断开连接”。
 
-- `error: file does not exist`：发送端路径不存在。
-- `error: failed to send session`：网络不通、端口未监听或被防火墙拦截。
-- `error: failed to receive file`：端口被占用或监听失败。
-- `entry error: ...`：某条目处理失败（路径非法、权限不足、冲突不可覆盖等）。
+### 3.3 接收端操作
 
-## 6. 限制说明（V1.2）
+1. 在“接收端”页签设置监听 IP、端口、保存目录。
+2. 点击“开启连接”启动监听。
+3. 传输完成后可继续监听下一次会话。
+4. 点击“断开连接”手动关闭监听。
+
+## 4. 常见错误
+
+- `error: failed to send session`：目标不可达或端口未监听。
+- `entry error: ...`：单条目失败（路径非法、权限不足、冲突不可覆盖等）。
+- GUI 提示“未安装 PySide6”：请先安装 GUI 依赖。
+
+## 5. 限制说明（V1.3）
 
 - 不支持断点续传。
-- 不支持文件内容校验（hash）。
+- 不支持文件内容 hash 校验。
 - 不支持传输加密与鉴权。
 - 不支持并发多连接会话。

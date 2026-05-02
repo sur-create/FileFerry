@@ -16,6 +16,16 @@
 - 确认安装目录未被手动删改。
 - 执行卸载后重新安装。
 
+## 2.1 GUI 无法启动（缺少 PySide6）
+
+症状：`未安装 PySide6，无法启动图形界面`。
+
+处理：
+
+```bash
+python3 -m pip install ".[gui]"
+```
+
 ## 3. 端口监听失败
 
 症状：`failed to receive file`。
