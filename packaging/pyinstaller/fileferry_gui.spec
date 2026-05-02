@@ -1,16 +1,34 @@
 # -*- mode: python ; coding: utf-8 -*-
+from pathlib import Path
 
 block_cipher = None
+_SPEC_FILE = globals().get("SPEC")
+if _SPEC_FILE:
+    SPEC_DIR = Path(_SPEC_FILE).resolve().parent
+else:
+    _cwd = Path.cwd().resolve()
+    if (_cwd / "fileferry_gui" / "app.py").exists():
+        SPEC_DIR = _cwd
+    elif (_cwd / "packaging" / "pyinstaller" / "fileferry_gui.spec").exists():
+        SPEC_DIR = _cwd / "packaging" / "pyinstaller"
+    else:
+        SPEC_DIR = _cwd
+for _candidate in (SPEC_DIR, *SPEC_DIR.parents):
+    if (_candidate / "pyproject.toml").exists():
+        ROOT = _candidate
+        break
+else:
+    ROOT = SPEC_DIR.parents[1]
 
 a = Analysis(
-    ['fileferry_gui/app.py'],
-    pathex=['.'],
+    [str(ROOT / "fileferry_gui" / "app.py")],
+    pathex=[str(ROOT)],
     binaries=[],
     datas=[
-        ('README.md', '.'),
-        ('docs/user_manual.md', 'docs'),
+        (str(ROOT / "README.md"), "."),
+        (str(ROOT / "docs" / "user_manual.md"), "docs"),
     ],
-    hiddenimports=['fileferry', 'fileferry_gui'],
+    hiddenimports=["fileferry", "fileferry_gui"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
