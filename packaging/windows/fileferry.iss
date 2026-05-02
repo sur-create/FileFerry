@@ -7,7 +7,7 @@
 #define MyAppExeName "fileferry.exe"
 
 [Setup]
-AppId={{A0F8C53B-74E0-4FF7-ACD8-4D2E30339FCE}
+AppId={{A0F8C53B-74E0-4FF7-ACD8-4D2E30339FCE}}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}

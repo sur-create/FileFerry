@@ -1,14 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
+from pathlib import Path
 
 block_cipher = None
+SPEC_DIR = Path(__file__).resolve().parent
+ROOT = SPEC_DIR.parents[1]
 
 a = Analysis(
-    ['packaging/pyinstaller/entrypoint.py'],
-    pathex=['.'],
+    [str(SPEC_DIR / 'entrypoint.py')],
+    pathex=[str(ROOT)],
     binaries=[],
     datas=[
-        ('README.md', '.'),
-        ('docs/user_manual.md', 'docs'),
+        (str(ROOT / 'README.md'), '.'),
+        (str(ROOT / 'docs' / 'user_manual.md'), 'docs'),
     ],
     hiddenimports=['fileferry'],
     hookspath=[],

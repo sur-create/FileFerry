@@ -49,12 +49,12 @@ jobs:
 
       - name: Install build dependencies
         run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install -r requirements-dev.txt
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
 
       - name: Build binary and pkg
         run: |
-          python3 scripts/build_binary.py --clean
+          python scripts/build_binary.py --clean
           bash packaging/macos/build_pkg.sh
 
       - name: Upload artifacts
@@ -77,11 +77,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y rpm
-          python3 -m pip install --upgrade pip
-          python3 -m pip install -r requirements-dev.txt
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
 
       - name: Build binary
-        run: python3 scripts/build_binary.py --clean
+        run: python scripts/build_binary.py --clean
 
       - name: Build deb/rpm installers
         run: |
