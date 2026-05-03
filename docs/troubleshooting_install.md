@@ -61,7 +61,14 @@ cat ~/.local/state/fileferry/gui-launch.log
 
 ```bash
 sudo apt update
-sudo apt install -y libxcb-cursor0
+sudo apt install -y \
+  libxcb-cursor0 \
+  libxkbcommon-x11-0 \
+  libxcb-icccm4 \
+  libxcb-image0 \
+  libxcb-keysyms1 \
+  libxcb-render-util0 \
+  libxcb-xinerama0
 ```
 
 - Fedora/RHEL/CentOS:
@@ -71,6 +78,7 @@ sudo dnf install -y xcb-util-cursor
 ```
 
 安装后重新执行 `fileferry-gui`。
+若仍失败，请把 `~/.local/state/fileferry/gui-launch.log` 的最新 30 行贴出来。
 
 ## 3. 端口监听失败
 
