@@ -52,7 +52,6 @@ License:        Proprietary
 URL:            https://example.invalid/fileferry
 Source0:        ${SRC_DIR_NAME}.tar.gz
 BuildArch:      ${ARCH}
-AutoReqProv:    no
 
 %description
 FileFerry is a self-contained LAN transfer tool with CLI and desktop GUI.

@@ -36,6 +36,7 @@ need_tool dpkg-deb
 VERSION="$(python3 -c 'from fileferry import __version__; print(__version__)')"
 RAW_ARCH="$(dpkg --print-architecture 2>/dev/null || uname -m)"
 ARCH="$(map_arch "$RAW_ARCH")"
+DEB_DEPENDS="libc6, libxcb-cursor0, libxkbcommon-x11-0, libxcb-icccm4, libxcb-image0, libxcb-keysyms1, libxcb-render-util0, libxcb-xinerama0"
 
 rm -rf "$BUILD_DIR"
 mkdir -p "$PKG_ROOT/DEBIAN" "$PKG_ROOT/opt/fileferry" "$PKG_ROOT/opt/fileferry-gui" "$PKG_ROOT/usr/bin" "$PKG_ROOT/usr/share/applications" "$INSTALLER_DIR"
@@ -53,7 +54,7 @@ Section: utils
 Priority: optional
 Architecture: ${ARCH}
 Maintainer: FileFerry Team <support@fileferry.local>
-Depends: libc6
+Depends: ${DEB_DEPENDS}
 Description: FileFerry LAN file transfer tool with GUI
  Self-contained LAN transfer utility supporting CLI and desktop GUI.
 CONTROL
