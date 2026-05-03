@@ -51,6 +51,25 @@ if [[ -n "$output" ]]; then
   printf '%s\n' "$output" >&2
 fi
 
+install_hint=""
+if [[ "$output" == *"xcb-cursor0 or libxcb-cursor0"* ]] || [[ "$output" == *'Qt platform plugin "xcb"'* ]]; then
+  if command -v apt-get >/dev/null 2>&1; then
+    install_hint="sudo apt update && sudo apt install -y libxcb-cursor0"
+  elif command -v dnf >/dev/null 2>&1; then
+    install_hint="sudo dnf install -y xcb-util-cursor"
+  elif command -v yum >/dev/null 2>&1; then
+    install_hint="sudo yum install -y xcb-util-cursor"
+  else
+    install_hint="install package providing libxcb-cursor.so.0"
+  fi
+  log_line "hint: run $install_hint"
+  echo "hint: run $install_hint" >&2
+fi
+
 log_line "error: gui launcher exited with code $status"
-show_error_dialog "FileFerry GUI 启动失败（退出码 $status）。\n日志：$LOG_FILE"
+dialog_msg="FileFerry GUI 启动失败（退出码 $status）。\n日志：$LOG_FILE"
+if [[ -n "$install_hint" ]]; then
+  dialog_msg="$dialog_msg\n建议执行：$install_hint"
+fi
+show_error_dialog "$dialog_msg"
 exit "$status"

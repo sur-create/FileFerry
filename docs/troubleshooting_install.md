@@ -48,6 +48,30 @@ dpkg -L fileferry 2>/dev/null | grep -E 'fileferry-gui|/opt/fileferry-gui'
 cat ~/.local/state/fileferry/gui-launch.log
 ```
 
+## 2.3 Linux 报错：Qt platform plugin "xcb" 无法加载
+
+常见日志（你当前就是这个）：
+
+- `x... xcb-cursor0 or libxcb-cursor0 is needed`
+- `Could not load the Qt platform plugin "xcb"`
+
+处理：
+
+- Debian/Ubuntu:
+
+```bash
+sudo apt update
+sudo apt install -y libxcb-cursor0
+```
+
+- Fedora/RHEL/CentOS:
+
+```bash
+sudo dnf install -y xcb-util-cursor
+```
+
+安装后重新执行 `fileferry-gui`。
+
 ## 3. 端口监听失败
 
 症状：`failed to receive file`。
