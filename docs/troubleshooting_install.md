@@ -26,6 +26,28 @@
 python3 -m pip install ".[gui]"
 ```
 
+## 2.2 Linux 安装后点击图标无反应
+
+症状：
+
+- 菜单中点击 FileFerry 没有窗口。
+- 终端执行 `fileferry-gui` 提示 `command not found` 或 `runtime not found`。
+
+处理：
+
+1. 确认安装包是否包含 GUI 运行时：
+
+```bash
+dpkg -L fileferry 2>/dev/null | grep -E 'fileferry-gui|/opt/fileferry-gui'
+```
+
+2. 如果没有任何输出，说明当前安装的是旧版 CLI-only 包，请卸载并安装 V1.3+ Linux 安装包。
+3. 如果命令存在但仍无法启动，查看 GUI 启动日志：
+
+```bash
+cat ~/.local/state/fileferry/gui-launch.log
+```
+
 ## 3. 端口监听失败
 
 症状：`failed to receive file`。
