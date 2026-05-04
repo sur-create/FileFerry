@@ -15,6 +15,7 @@ from fileferry.sender import SessionSenderConfig, send_session
 class SendSessionWorker(QThread):
     """Worker that sends one transfer session in the background."""
 
+    progress = Signal(object)
     completed = Signal(object)
     failed = Signal(str)
 
@@ -24,7 +25,17 @@ class SendSessionWorker(QThread):
 
     def run(self) -> None:  # noqa: D401
         try:
-            result = send_session(self._config)
+            config = SessionSenderConfig(
+                host=self._config.host,
+                port=self._config.port,
+                sources=self._config.sources,
+                timeout=self._config.timeout,
+                chunk_size=self._config.chunk_size,
+                conflict_policy=self._config.conflict_policy,
+                continue_on_error=self._config.continue_on_error,
+                progress_callback=self.progress.emit,
+            )
+            result = send_session(config)
         except Exception as exc:  # pragma: no cover - UI runtime branch
             self.failed.emit(str(exc))
             return
@@ -34,6 +45,7 @@ class SendSessionWorker(QThread):
 class ReceiverServerWorker(QThread):
     """Worker that keeps a receiver socket open until manually stopped."""
 
+    progress = Signal(object)
     listening_started = Signal(str)
     listening_stopped = Signal(str)
     server_error = Signal(str)
@@ -82,7 +94,17 @@ class ReceiverServerWorker(QThread):
 
                     with conn:
                         try:
-                            result = receive_session_from_connection(conn, addr, self._config)
+                            config = ReceiverConfig(
+                                host=self._config.host,
+                                port=self._config.port,
+                                output_dir=self._config.output_dir,
+                                timeout=self._config.timeout,
+                                chunk_size=self._config.chunk_size,
+                                conflict_policy=self._config.conflict_policy,
+                                continue_on_error=self._config.continue_on_error,
+                                progress_callback=self.progress.emit,
+                            )
+                            result = receive_session_from_connection(conn, addr, config)
                         except Exception as exc:  # pragma: no cover - UI runtime branch
                             self.session_failed.emit(f"会话失败（{addr[0]}:{addr[1]}）：{exc}")
                         else:

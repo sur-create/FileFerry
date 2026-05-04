@@ -1,6 +1,6 @@
 ---
 name: fileferry-development
-description: Use when implementing or updating FileFerry features. Enforces project standards for branch-first development, V1.2/V1.3 protocol compatibility, Chinese GUI conventions, packaging alignment, and required validation/document updates.
+description: Use when implementing or updating FileFerry features. Enforces branch-first development from main, V1.2/V1.3 compatibility, Chinese cross-platform GUI conventions, packaging alignment, progress/state requirements, and required validation/document updates.
 ---
 
 # FileFerry Development Standards
@@ -9,15 +9,17 @@ Use this skill for any feature work, bugfix, refactor, or packaging update in th
 
 ## Mandatory Workflow
 
-1. Start from `main` and create a new feature branch before coding.
+1. Start from `main` and create a new feature branch or worktree before coding.
 2. Read impacted docs first:
    - `docs/requirements_v1.2.md`
    - `docs/requirements_v1.3.md` (if GUI or packaging is touched)
+   - `docs/requirements_v1.4.md` (if current iteration or progress/resume work is touched)
    - `docs/architecture_design.md`
 3. Implement minimal coherent changes across affected layers (protocol/core/CLI/GUI/packaging).
-4. Run validation commands (below).
-5. Update docs and version fields when behavior or deliverables change.
-6. Commit on the feature branch and hand off for user merge to `main`.
+4. Add or update tests for the changed behavior, including progress/state transitions when relevant.
+5. Run validation commands (below).
+6. Update docs and version fields when behavior or deliverables change.
+7. Commit on the feature branch and hand off for user merge to `main`.
 
 ## Project Constraints
 
@@ -31,6 +33,13 @@ Use this skill for any feature work, bugfix, refactor, or packaging update in th
   - Chinese UI text
   - manual connect/disconnect controls for sender and receiver
   - receiver can start/stop listening explicitly
+- For V1.4+ GUI changes:
+  - show concrete transfer progress (session + current entry)
+  - make disabled state visually distinct
+  - keep send action gated by connection/source readiness
+- For resumable-transfer requests:
+  - treat as a scoped research/design task unless the user explicitly asks for implementation
+  - document feasibility, boundaries, and the recommended first phase
 - Preserve CLI + GUI coexistence in packaging outputs.
 - Do not break `send_file` / `receive_once` compatibility wrappers unless explicitly requested.
 
@@ -60,12 +69,14 @@ If it fails due missing `PySide6`, record that clearly and keep the dependency/i
 - `docs/user_manual.md`
 - `docs/test_report.md`
 - `docs/architecture_design.md`
+- `docs/requirements_v1.4.md` (or the current versioned requirements doc)
 - `docs/packaging_test_report.md` (if packaging touched)
 - `pyproject.toml` + `fileferry/__init__.py` (version bumps when releasing a new iteration)
 
 ## Completion Checklist
 
 - New branch was used.
+- Branch was created from `main`.
 - Behavior matches current requirements docs.
 - Tests passed (or failures documented with root cause).
 - Docs and packaging instructions are updated.

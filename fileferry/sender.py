@@ -6,17 +6,17 @@ import socket
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Sequence, Set, Tuple
+from typing import Callable, List, Optional, Sequence, Set, Tuple
 
 from .errors import ConfigurationError, NetworkError, ProtocolError
 from .protocol import (
     PROTOCOL_VERSION,
     payload_size_from_header,
     sanitize_relative_path,
-    send_file_payload,
     send_frame_header,
     recv_frame_header,
 )
+from .progress import TransferProgress
 
 DEFAULT_CHUNK_SIZE = 64 * 1024
 VALID_CONFLICT_POLICIES = {"overwrite", "skip", "rename"}
@@ -49,6 +49,7 @@ class SessionSenderConfig:
     chunk_size: int = DEFAULT_CHUNK_SIZE
     conflict_policy: str = "overwrite"
     continue_on_error: bool = True
+    progress_callback: Optional[Callable[[TransferProgress], None]] = None
 
 
 @dataclass(frozen=True)
@@ -127,6 +128,14 @@ def _append_manifest_failure(
             detail=detail,
         )
     )
+
+
+def _emit_progress(
+    callback: Optional[Callable[[TransferProgress], None]],
+    progress: TransferProgress,
+) -> None:
+    if callback is not None:
+        callback(progress)
 
 
 def _walk_source(
@@ -292,6 +301,9 @@ def send_session(config: SessionSenderConfig) -> SendSessionResult:
     total_bytes_sent = 0
     start = time.perf_counter()
     aborted = False
+    progress_callback = config.progress_callback
+    session_bytes_total = sum(entry.filesize for entry in manifest_entries if entry.kind == "file")
+    completed_entries = 0
 
     try:
         with socket.create_connection((config.host, config.port), timeout=config.timeout) as sock:
@@ -304,10 +316,23 @@ def send_session(config: SessionSenderConfig) -> SendSessionResult:
                     "conflict_policy": config.conflict_policy,
                     "continue_on_error": config.continue_on_error,
                     "entry_count": len(manifest_entries),
+                    "total_file_bytes": session_bytes_total,
                 },
             )
+            _emit_progress(
+                progress_callback,
+                TransferProgress(
+                    direction="send",
+                    stage="session_start",
+                    total_entries=len(manifest_entries),
+                    completed_entries=0,
+                    session_bytes_done=0,
+                    session_bytes_total=session_bytes_total,
+                    message="会话已开始",
+                ),
+            )
 
-            for entry in manifest_entries:
+            for index, entry in enumerate(manifest_entries, start=1):
                 if entry.kind == "dir":
                     send_frame_header(
                         sock,
@@ -316,6 +341,21 @@ def send_session(config: SessionSenderConfig) -> SendSessionResult:
                             "payload_size": 0,
                             "relative_path": entry.relative_path,
                         },
+                    )
+                    _emit_progress(
+                        progress_callback,
+                        TransferProgress(
+                            direction="send",
+                            stage="entry_dir",
+                            total_entries=len(manifest_entries),
+                            completed_entries=completed_entries,
+                            current_index=index,
+                            relative_path=entry.relative_path,
+                            kind="dir",
+                            session_bytes_done=total_bytes_sent,
+                            session_bytes_total=session_bytes_total,
+                            message="目录已发送",
+                        ),
                     )
                 else:
                     assert entry.source_path is not None
@@ -328,9 +368,59 @@ def send_session(config: SessionSenderConfig) -> SendSessionResult:
                             "mtime": entry.mtime,
                         },
                     )
+                    sent = 0
+                    last_emit = time.perf_counter()
                     with entry.source_path.open("rb") as fp:
-                        sent = send_file_payload(sock, fp, config.chunk_size)
-                    total_bytes_sent += sent
+                        while True:
+                            chunk = fp.read(config.chunk_size)
+                            if not chunk:
+                                break
+                            sock.sendall(chunk)
+                            sent += len(chunk)
+                            total_bytes_sent += len(chunk)
+                            now = time.perf_counter()
+                            if now - last_emit >= 0.1 or sent == entry.filesize:
+                                elapsed = max(now - start, 1e-9)
+                                speed = total_bytes_sent / elapsed
+                                remaining = max(session_bytes_total - total_bytes_sent, 0)
+                                eta = remaining / speed if speed > 0 else None
+                                _emit_progress(
+                                    progress_callback,
+                                    TransferProgress(
+                                        direction="send",
+                                        stage="entry_file",
+                                        total_entries=len(manifest_entries),
+                                        completed_entries=completed_entries,
+                                        current_index=index,
+                                        relative_path=entry.relative_path,
+                                        kind="file",
+                                        entry_bytes_done=sent,
+                                        entry_bytes_total=entry.filesize,
+                                        session_bytes_done=total_bytes_sent,
+                                        session_bytes_total=session_bytes_total,
+                                        speed_bytes_per_sec=speed,
+                                        eta_seconds=eta,
+                                        message="文件传输中",
+                                    ),
+                                )
+                                last_emit = now
+                    _emit_progress(
+                        progress_callback,
+                        TransferProgress(
+                            direction="send",
+                            stage="entry_file_done",
+                            total_entries=len(manifest_entries),
+                            completed_entries=completed_entries,
+                            current_index=index,
+                            relative_path=entry.relative_path,
+                            kind="file",
+                            entry_bytes_done=entry.filesize,
+                            entry_bytes_total=entry.filesize,
+                            session_bytes_done=total_bytes_sent,
+                            session_bytes_total=session_bytes_total,
+                            message="文件已发送",
+                        ),
+                    )
 
                 entry_result = _recv_entry_result_from_socket(sock)
                 if entry.kind == "file" and entry_result.bytes_sent == 0:
@@ -343,6 +433,23 @@ def send_session(config: SessionSenderConfig) -> SendSessionResult:
                         bytes_sent=entry.filesize,
                     )
                 results.append(entry_result)
+                completed_entries += 1
+                _emit_progress(
+                    progress_callback,
+                    TransferProgress(
+                        direction="send",
+                        stage="entry_result",
+                        total_entries=len(manifest_entries),
+                        completed_entries=completed_entries,
+                        current_index=index,
+                        relative_path=entry_result.relative_path,
+                        kind=entry_result.kind,
+                        session_bytes_done=total_bytes_sent,
+                        session_bytes_total=session_bytes_total,
+                        message=f"条目结果：{entry_result.status}",
+                        detail=entry_result.detail,
+                    ),
+                )
 
                 if entry_result.status == "error" and not config.continue_on_error:
                     aborted = True
@@ -360,6 +467,18 @@ def send_session(config: SessionSenderConfig) -> SendSessionResult:
             final_header = recv_frame_header(sock)
             if final_header.get("type") != "session_result":
                 raise ProtocolError("receiver did not return session_result")
+            _emit_progress(
+                progress_callback,
+                TransferProgress(
+                    direction="send",
+                    stage="session_end",
+                    total_entries=len(manifest_entries),
+                    completed_entries=completed_entries,
+                    session_bytes_done=total_bytes_sent,
+                    session_bytes_total=session_bytes_total,
+                    message="会话已结束",
+                ),
+            )
     except OSError as exc:
         raise NetworkError(f"failed to send session: {exc}") from exc
 

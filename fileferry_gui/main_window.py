@@ -9,8 +9,9 @@ from typing import List, Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
     QFileDialog,
-    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -19,6 +20,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QMessageBox,
+    QProgressBar,
     QPushButton,
     QSpinBox,
     QSplitter,
@@ -26,13 +28,20 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
     QWidget,
-    QCheckBox,
-    QComboBox,
 )
 
 from fileferry.cli import default_output_dir
+from fileferry.progress import TransferProgress
 from fileferry.receiver import ReceiverConfig
 from fileferry.sender import SessionSenderConfig
+from .ui_state import (
+    format_bytes,
+    format_eta,
+    format_speed,
+    progress_overview,
+    progress_percent,
+    send_button_state,
+)
 from .workers import ReceiverServerWorker, SendSessionWorker
 
 
@@ -42,7 +51,7 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("FileFerry 文件传输")
-        self.resize(1180, 760)
+        self.resize(1200, 800)
 
         self._send_worker: Optional[SendSessionWorker] = None
         self._receiver_worker: Optional[ReceiverServerWorker] = None
@@ -52,6 +61,9 @@ class MainWindow(QMainWindow):
         self._apply_styles()
         self._update_sender_status(False, "未连接")
         self._update_receiver_status(False, "监听未开启")
+        self._refresh_send_button()
+        self._reset_send_progress()
+        self._reset_recv_progress()
 
     def _init_ui(self) -> None:
         central = QWidget()
@@ -61,9 +73,9 @@ class MainWindow(QMainWindow):
         root_layout.setContentsMargins(16, 16, 16, 16)
         root_layout.setSpacing(12)
 
-        title = QLabel("FileFerry V1.3 桌面版")
+        title = QLabel("FileFerry V1.4 桌面版")
         title.setObjectName("TitleLabel")
-        subtitle = QLabel("跨平台文件/文件夹传输（中文界面，手动连接控制）")
+        subtitle = QLabel("跨平台文件/文件夹传输（中文界面，进度可视化，手动连接控制）")
         subtitle.setObjectName("SubtitleLabel")
 
         root_layout.addWidget(title)
@@ -90,7 +102,7 @@ class MainWindow(QMainWindow):
         log_layout.addWidget(self.log_view)
 
         splitter.addWidget(log_panel)
-        splitter.setSizes([500, 220])
+        splitter.setSizes([560, 240])
 
         root_layout.addWidget(splitter)
 
@@ -163,7 +175,6 @@ class MainWindow(QMainWindow):
 
         self.send_start_btn = QPushButton("开始发送")
         self.send_start_btn.setObjectName("PrimaryButton")
-        self.send_start_btn.setEnabled(False)
 
         options_layout.addWidget(QLabel("冲突策略"))
         options_layout.addWidget(self.send_conflict_combo)
@@ -175,6 +186,23 @@ class MainWindow(QMainWindow):
         options_layout.addStretch(1)
         options_layout.addWidget(self.send_start_btn)
 
+        progress_box = QGroupBox("发送进度")
+        progress_layout = QVBoxLayout(progress_box)
+        self.send_progress_text = QLabel("等待发送任务")
+        self.send_progress_text.setWordWrap(True)
+        self.send_overall_progress = QProgressBar()
+        self.send_overall_progress.setRange(0, 100)
+        self.send_overall_progress.setValue(0)
+        self.send_file_label = QLabel("当前条目：-")
+        self.send_file_progress = QProgressBar()
+        self.send_file_progress.setRange(0, 100)
+        self.send_file_progress.setValue(0)
+
+        progress_layout.addWidget(self.send_progress_text)
+        progress_layout.addWidget(self.send_overall_progress)
+        progress_layout.addWidget(self.send_file_label)
+        progress_layout.addWidget(self.send_file_progress)
+
         summary_box = QGroupBox("最近一次发送摘要")
         summary_layout = QHBoxLayout(summary_box)
         self.send_summary_label = QLabel("暂无")
@@ -184,6 +212,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(conn_box)
         layout.addWidget(sources_box, 1)
         layout.addWidget(options_box)
+        layout.addWidget(progress_box)
         layout.addWidget(summary_box)
 
         self.send_connect_btn.clicked.connect(self._on_sender_connect)
@@ -191,7 +220,7 @@ class MainWindow(QMainWindow):
         self.add_file_btn.clicked.connect(self._on_add_files)
         self.add_dir_btn.clicked.connect(self._on_add_dir)
         self.remove_selected_btn.clicked.connect(self._on_remove_selected_sources)
-        self.clear_sources_btn.clicked.connect(self.send_sources_list.clear)
+        self.clear_sources_btn.clicked.connect(self._on_clear_sources)
         self.send_start_btn.clicked.connect(self._on_start_send)
 
         self.send_host_input.textChanged.connect(self._on_sender_config_changed)
@@ -261,6 +290,23 @@ class MainWindow(QMainWindow):
         control_layout.addWidget(self.recv_stop_btn)
         control_layout.addWidget(self.recv_status_label)
 
+        progress_box = QGroupBox("接收进度")
+        progress_layout = QVBoxLayout(progress_box)
+        self.recv_progress_text = QLabel("等待接收任务")
+        self.recv_progress_text.setWordWrap(True)
+        self.recv_overall_progress = QProgressBar()
+        self.recv_overall_progress.setRange(0, 100)
+        self.recv_overall_progress.setValue(0)
+        self.recv_file_label = QLabel("当前条目：-")
+        self.recv_file_progress = QProgressBar()
+        self.recv_file_progress.setRange(0, 100)
+        self.recv_file_progress.setValue(0)
+
+        progress_layout.addWidget(self.recv_progress_text)
+        progress_layout.addWidget(self.recv_overall_progress)
+        progress_layout.addWidget(self.recv_file_label)
+        progress_layout.addWidget(self.recv_file_progress)
+
         summary_box = QGroupBox("最近一次接收摘要")
         summary_layout = QHBoxLayout(summary_box)
         self.recv_summary_label = QLabel("暂无")
@@ -269,6 +315,7 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(conn_box)
         layout.addWidget(control_box)
+        layout.addWidget(progress_box)
         layout.addWidget(summary_box)
         layout.addStretch(1)
 
@@ -316,8 +363,9 @@ class MainWindow(QMainWindow):
             }
             QPushButton:hover { background-color: #edf3ff; }
             QPushButton:disabled {
-                color: #9aa5b1;
-                background-color: #f1f4f8;
+                color: #6b7280;
+                background-color: #e5e7eb;
+                border: 1px solid #c4ccd8;
             }
             QPushButton#PrimaryButton {
                 background-color: #2563eb;
@@ -325,6 +373,22 @@ class MainWindow(QMainWindow):
                 color: #ffffff;
             }
             QPushButton#PrimaryButton:hover { background-color: #1d4ed8; }
+            QPushButton#PrimaryButton:disabled {
+                background-color: #a7bce8;
+                border: 1px solid #93abd9;
+                color: #edf3ff;
+            }
+            QProgressBar {
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+                text-align: center;
+                background-color: #f8fafc;
+                min-height: 20px;
+            }
+            QProgressBar::chunk {
+                border-radius: 5px;
+                background-color: #0ea5e9;
+            }
             """
         )
 
@@ -336,13 +400,38 @@ class MainWindow(QMainWindow):
         QMessageBox.critical(self, title, detail)
         self._log(f"错误：{title} - {detail}")
 
+    def _is_send_busy(self) -> bool:
+        return self._send_worker is not None and self._send_worker.isRunning()
+
+    def _refresh_send_button(self) -> None:
+        text, enabled, tooltip = send_button_state(
+            connected=self._sender_connected,
+            has_sources=self.send_sources_list.count() > 0,
+            busy=self._is_send_busy(),
+        )
+        self.send_start_btn.setText(text)
+        self.send_start_btn.setEnabled(enabled)
+        self.send_start_btn.setToolTip(tooltip)
+
+    def _reset_send_progress(self) -> None:
+        self.send_overall_progress.setValue(0)
+        self.send_file_progress.setValue(0)
+        self.send_progress_text.setText("等待发送任务")
+        self.send_file_label.setText("当前条目：-")
+
+    def _reset_recv_progress(self) -> None:
+        self.recv_overall_progress.setValue(0)
+        self.recv_file_progress.setValue(0)
+        self.recv_progress_text.setText("等待接收任务")
+        self.recv_file_label.setText("当前条目：-")
+
     def _update_sender_status(self, connected: bool, text: str) -> None:
         self._sender_connected = connected
         color = "#059669" if connected else "#b91c1c"
         self.send_status_label.setText(f"<b style='color:{color};'>{text}</b>")
         self.send_connect_btn.setEnabled(not connected)
         self.send_disconnect_btn.setEnabled(connected)
-        self.send_start_btn.setEnabled(connected and self.send_sources_list.count() > 0)
+        self._refresh_send_button()
 
     def _update_receiver_status(self, listening: bool, text: str) -> None:
         color = "#0f766e" if listening else "#7f1d1d"
@@ -353,6 +442,8 @@ class MainWindow(QMainWindow):
     def _on_sender_config_changed(self) -> None:
         if self._sender_connected:
             self._update_sender_status(False, "参数已变更，请重新开启连接")
+        else:
+            self._refresh_send_button()
 
     def _on_sender_connect(self) -> None:
         host = self.send_host_input.text().strip()
@@ -391,13 +482,17 @@ class MainWindow(QMainWindow):
             if self.send_sources_list.item(row).text() == normalized:
                 return
         self.send_sources_list.addItem(QListWidgetItem(normalized))
-        self.send_start_btn.setEnabled(self._sender_connected and self.send_sources_list.count() > 0)
+        self._refresh_send_button()
 
     def _on_remove_selected_sources(self) -> None:
         selected = self.send_sources_list.selectedItems()
         for item in selected:
             self.send_sources_list.takeItem(self.send_sources_list.row(item))
-        self.send_start_btn.setEnabled(self._sender_connected and self.send_sources_list.count() > 0)
+        self._refresh_send_button()
+
+    def _on_clear_sources(self) -> None:
+        self.send_sources_list.clear()
+        self._refresh_send_button()
 
     def _collect_send_sources(self) -> List[Path]:
         sources: List[Path] = []
@@ -406,7 +501,7 @@ class MainWindow(QMainWindow):
         return sources
 
     def _on_start_send(self) -> None:
-        if self._send_worker is not None and self._send_worker.isRunning():
+        if self._is_send_busy():
             self._show_error("发送中", "当前已有发送任务在运行")
             return
 
@@ -426,22 +521,56 @@ class MainWindow(QMainWindow):
         )
 
         self._send_worker = SendSessionWorker(config)
+        self._send_worker.progress.connect(self._on_send_progress)
         self._send_worker.completed.connect(self._on_send_completed)
         self._send_worker.failed.connect(self._on_send_failed)
         self._send_worker.finished.connect(self._on_send_finished)
 
+        self._reset_send_progress()
+        self.send_progress_text.setText("发送任务已启动")
+        self.send_start_btn.setText("发送中...")
         self.send_start_btn.setEnabled(False)
+        self.send_start_btn.setToolTip("当前已有发送任务在运行")
         self._log("开始发送会话...")
         self._send_worker.start()
+
+    def _on_send_progress(self, payload: object) -> None:
+        if not isinstance(payload, TransferProgress):
+            return
+
+        session_done = payload.session_bytes_done
+        session_total = payload.session_bytes_total
+        if session_total > 0:
+            overall_percent = progress_percent(session_done, session_total)
+        else:
+            overall_percent = progress_percent(payload.completed_entries, payload.total_entries)
+        self.send_overall_progress.setValue(overall_percent)
+
+        if payload.entry_bytes_total > 0:
+            self.send_file_progress.setValue(progress_percent(payload.entry_bytes_done, payload.entry_bytes_total))
+            self.send_file_label.setText(
+                "当前条目："
+                f"{payload.relative_path or '-'} "
+                f"({format_bytes(payload.entry_bytes_done)} / {format_bytes(payload.entry_bytes_total)})"
+            )
+        elif payload.relative_path:
+            self.send_file_progress.setValue(0)
+            self.send_file_label.setText(f"当前条目：{payload.relative_path} ({payload.message or payload.stage})")
+
+        self.send_progress_text.setText(progress_overview(payload))
 
     def _on_send_completed(self, result: object) -> None:
         summary = (
             f"总条目 {result.total_entries}，成功 {result.successful_entries}，"
             f"跳过 {result.skipped_entries}，重命名 {result.renamed_entries}，"
-            f"失败 {result.failed_entries}，发送字节 {result.total_bytes_sent}，"
+            f"失败 {result.failed_entries}，发送字节 {format_bytes(result.total_bytes_sent)}，"
             f"耗时 {result.elapsed_seconds:.2f}s"
         )
         self.send_summary_label.setText(summary)
+        self.send_overall_progress.setValue(100 if result.total_entries > 0 else 0)
+        self.send_progress_text.setText(
+            f"发送完成 | 平均速度 {format_speed(result.total_bytes_sent / max(result.elapsed_seconds, 1e-9))}"
+        )
         self._log(f"发送完成：{summary}")
 
         if result.failed_entries > 0:
@@ -455,7 +584,7 @@ class MainWindow(QMainWindow):
         self._update_sender_status(False, "连接异常，已断开")
 
     def _on_send_finished(self) -> None:
-        self.send_start_btn.setEnabled(self._sender_connected and self.send_sources_list.count() > 0)
+        self._refresh_send_button()
 
     def _on_pick_output_dir(self) -> None:
         folder = QFileDialog.getExistingDirectory(self, "选择接收保存目录")
@@ -479,6 +608,7 @@ class MainWindow(QMainWindow):
         )
 
         worker = ReceiverServerWorker(config)
+        worker.progress.connect(self._on_recv_progress)
         worker.listening_started.connect(self._on_receiver_listening_started)
         worker.listening_stopped.connect(self._on_receiver_listening_stopped)
         worker.server_error.connect(self._on_receiver_server_error)
@@ -486,6 +616,7 @@ class MainWindow(QMainWindow):
         worker.session_failed.connect(self._on_receiver_session_failed)
 
         self._receiver_worker = worker
+        self._reset_recv_progress()
         self._update_receiver_status(True, "监听启动中...")
         self._log("正在开启接收端监听...")
         worker.start()
@@ -509,14 +640,43 @@ class MainWindow(QMainWindow):
         self._update_receiver_status(False, "监听异常")
         self._show_error("监听失败", message)
 
+    def _on_recv_progress(self, payload: object) -> None:
+        if not isinstance(payload, TransferProgress):
+            return
+
+        if payload.session_bytes_total > 0:
+            overall = progress_percent(payload.session_bytes_done, payload.session_bytes_total)
+        else:
+            overall = progress_percent(payload.completed_entries, payload.total_entries)
+        self.recv_overall_progress.setValue(overall)
+
+        if payload.entry_bytes_total > 0:
+            self.recv_file_progress.setValue(progress_percent(payload.entry_bytes_done, payload.entry_bytes_total))
+            eta_text = format_eta(payload.eta_seconds)
+            self.recv_file_label.setText(
+                "当前条目："
+                f"{payload.relative_path or '-'} "
+                f"({format_bytes(payload.entry_bytes_done)} / {format_bytes(payload.entry_bytes_total)}), "
+                f"速度 {format_speed(payload.speed_bytes_per_sec)}, 剩余 {eta_text}"
+            )
+        elif payload.relative_path:
+            self.recv_file_progress.setValue(0)
+            self.recv_file_label.setText(f"当前条目：{payload.relative_path} ({payload.message or payload.stage})")
+
+        self.recv_progress_text.setText(progress_overview(payload))
+
     def _on_receiver_session_completed(self, result: object) -> None:
         summary = (
             f"总条目 {result.total_entries}，成功 {result.successful_entries}，"
             f"跳过 {result.skipped_entries}，重命名 {result.renamed_entries}，"
-            f"失败 {result.failed_entries}，接收字节 {result.total_bytes_received}，"
+            f"失败 {result.failed_entries}，接收字节 {format_bytes(result.total_bytes_received)}，"
             f"耗时 {result.elapsed_seconds:.2f}s"
         )
         self.recv_summary_label.setText(summary)
+        self.recv_overall_progress.setValue(100 if result.total_entries > 0 else 0)
+        self.recv_progress_text.setText(
+            f"接收完成 | 平均速度 {format_speed(result.total_bytes_received / max(result.elapsed_seconds, 1e-9))}"
+        )
         self._log(f"接收会话完成：{summary}")
 
         if result.failed_entries > 0:

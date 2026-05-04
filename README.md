@@ -24,7 +24,7 @@ python3 -m fileferry send --host <接收端IP> --port 9000 \
 python3 -m fileferry send --host <接收端IP> --port 9000 --file ./demo.txt
 ```
 
-## 桌面 GUI（V1.3）
+## 桌面 GUI（V1.4）
 
 安装 GUI 依赖：
 
@@ -38,13 +38,19 @@ python3 -m pip install ".[gui]"
 python3 -m fileferry_gui.app
 ```
 
+V1.4 新增：
+
+- 发送/接收进度可视化（会话级 + 当前条目级）。
+- 发送按钮状态自动切换（未连接/未选文件/可发送/发送中）。
+- 禁用按钮视觉区分增强。
+
 ## 运行测试
 
 ```bash
 python3 -m unittest discover -s tests -v
 ```
 
-## 打包构建（V1.1）
+## 打包构建
 
 安装开发依赖：
 
@@ -60,7 +66,8 @@ python3 scripts/build_packages.py --clean
 
 产物目录：
 
-- `dist/fileferry/`：自包含可执行目录（PyInstaller）
+- `dist/fileferry/`：自包含 CLI 可执行目录（PyInstaller）
+- `dist/fileferry-gui/`：自包含 GUI 可执行目录（PyInstaller）
 - `dist/installer/`：平台安装包
 
 ## 文档
@@ -68,6 +75,7 @@ python3 scripts/build_packages.py --clean
 - 需求分析：[docs/requirements_analysis.md](docs/requirements_analysis.md)
 - V1.2 需求：[docs/requirements_v1.2.md](docs/requirements_v1.2.md)
 - V1.3 需求：[docs/requirements_v1.3.md](docs/requirements_v1.3.md)
+- V1.4 需求：[docs/requirements_v1.4.md](docs/requirements_v1.4.md)
 - 架构设计：[docs/architecture_design.md](docs/architecture_design.md)
 - 测试报告：[docs/test_report.md](docs/test_report.md)
 - 用户手册：[docs/user_manual.md](docs/user_manual.md)

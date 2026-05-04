@@ -320,6 +320,44 @@ class TransferTests(unittest.TestCase):
             self.assertEqual((output_dir / "send_dir" / "a.txt").read_text("utf-8"), "A")
             self.assertEqual((output_dir / "b.txt").read_text("utf-8"), "B")
 
+    def test_send_progress_callback_emits_events(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            src_file = root / "progress.bin"
+            src_file.write_bytes(os.urandom(256 * 1024))
+
+            output_dir = root / "recv"
+            output_dir.mkdir()
+            port = get_free_port()
+
+            thread, errors, _ = self._run_receiver_session(port, output_dir, conflict_policy="overwrite")
+
+            events: list[object] = []
+
+            sent = send_session(
+                SessionSenderConfig(
+                    host="127.0.0.1",
+                    port=port,
+                    sources=[src_file],
+                    timeout=10.0,
+                    conflict_policy="overwrite",
+                    continue_on_error=True,
+                    progress_callback=events.append,
+                )
+            )
+            thread.join(timeout=10.0)
+
+            self.assertFalse(thread.is_alive(), "receiver thread did not finish in time")
+            if errors:
+                raise errors[0]
+
+            self.assertEqual(sent.failed_entries, 0)
+            self.assertGreater(len(events), 0)
+            stages = [getattr(event, "stage", "") for event in events]
+            self.assertIn("session_start", stages)
+            self.assertIn("entry_file", stages)
+            self.assertIn("session_end", stages)
+
 
 if __name__ == "__main__":
     unittest.main()

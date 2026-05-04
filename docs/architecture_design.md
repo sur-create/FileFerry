@@ -2,183 +2,125 @@
 
 ## 1. 总体架构
 
-本项目采用分层式命令行应用架构：
+本项目采用分层式应用架构：
 
-- 表现层：`fileferry/cli.py`
+- CLI 表现层：`fileferry/cli.py`
 - GUI 表现层：`fileferry_gui/main_window.py`
 - 业务层：`fileferry/sender.py`、`fileferry/receiver.py`
 - 协议层：`fileferry/protocol.py`
+- 进度模型层：`fileferry/progress.py`
+- UI 状态层：`fileferry_gui/ui_state.py`
 - 异常层：`fileferry/errors.py`
 
 特征：
 
-- 运行时业务代码零第三方依赖（仅 Python 标准库）。
-- 单进程、单连接、会话级多条目传输模型（V1.2 支持多文件与目录递归）。
-- V1.1 新增打包发布层，交付免 Python 环境安装包。
+- 核心传输逻辑保持标准库实现。
+- GUI 基于 PySide6，发送与接收均在后台线程执行。
+- 会话级多条目传输（V1.2）与手动连接控制（V1.3）持续兼容。
+- V1.4 在不破坏传输语义的前提下增加进度事件链路。
 
 ## 2. 目录结构
 
 ```text
 FileFerry/
-├── .github/workflows/
-│   └── release.yml
 ├── fileferry/
-│   ├── __main__.py
 │   ├── cli.py
 │   ├── errors.py
+│   ├── progress.py
 │   ├── protocol.py
 │   ├── receiver.py
 │   └── sender.py
 ├── fileferry_gui/
 │   ├── app.py
 │   ├── main_window.py
+│   ├── ui_state.py
 │   └── workers.py
 ├── packaging/
-│   ├── pyinstaller/
-│   ├── windows/
-│   ├── macos/
-│   └── linux/
 ├── scripts/
-│   ├── build_binary.py
-│   └── build_packages.py
 ├── tests/
-│   ├── test_protocol.py
-│   └── test_transfer.py
 └── docs/
-    ├── requirements_analysis.md
-    ├── architecture_design.md
-    ├── test_report.md
-    ├── user_manual.md
-    ├── install_windows.md
-    ├── install_macos.md
-    ├── install_linux.md
-    └── uninstall.md
 ```
 
 ## 3. 协议设计
 
-### 3.1 二进制格式
+### 3.1 帧格式
 
-1. `header_length`：4 字节无符号整数，网络字节序（big-endian）。
-2. `header_json`：UTF-8 JSON，会话帧字段示例：
-   - `type: session_start|entry_dir|entry_file|entry_result|session_end|session_result`
-   - `relative_path: string`（仅条目帧）
-   - `payload_size: int`（文件条目为文件字节数）
-3. `file_bytes`：当 `type=entry_file` 时附带原始文件字节流，长度等于 `payload_size`。
-
-### 3.2 协议防御
-
-- `header_length` 不能为 0，且上限 64KB。
-- `relative_path` 禁止绝对路径与 `..`（防路径穿越）。
-- `payload_size` 必须为非负整数。
-
-## 4. API 接口设计
-
-> 该项目无 HTTP API，接口形态为 CLI + Socket 协议。
-
-### 4.1 CLI 命令接口
-
-- 发送端：
-
-```bash
-python3 -m fileferry send --host <IP> --port <PORT> \
-  (--file <FILE> | --src <PATH> [--src <PATH> ...]) \
-  [--conflict overwrite|skip|rename] \
-  [--continue-on-error|--fail-fast] \
-  [--timeout 10] [--chunk-size 65536]
+```text
+[4-byte header_len][JSON header][binary payload(optional)]
 ```
 
-- 接收端：
+消息类型：
 
-```bash
-python3 -m fileferry recv --host 0.0.0.0 --port <PORT> \
-  [--output-dir DIR] \
-  [--conflict overwrite|skip|rename] \
-  [--continue-on-error|--fail-fast] \
-  [--timeout 10] [--chunk-size 65536]
-```
+- `session_start`
+- `entry_dir`
+- `entry_file`
+- `entry_result`
+- `session_end`
+- `session_result`
 
-### 4.2 代码级接口
+### 3.2 安全约束
 
-- `sender.send_session(SessionSenderConfig) -> SendSessionResult`
-- `receiver.receive_session(ReceiverConfig) -> ReceiveSessionResult`
-- 兼容接口：`sender.send_file(SenderConfig)`、`receiver.receive_once(ReceiverConfig)`
-- GUI 入口：`fileferry_gui.app:main`（`fileferry-gui` 命令）
+- `header_len` 不能为 0，且不超过 64KB。
+- `relative_path` 禁止绝对路径和 `..`，防止路径穿越。
+- `payload_size` 必须是非负整数。
 
-## 5. 数据建模
+## 4. 传输进度模型（V1.4）
 
-## 5.1 V1.0 持久化策略
+### 4.1 数据结构
 
-- V1.0 不要求数据库；文件系统即最终存储。
-- 元数据在传输期间以内存对象表示：`FileMetadata`。
+`TransferProgress` 字段覆盖：
 
-## 5.2 概念模型（内存）
+- 会话维度：`total_entries`、`completed_entries`、`session_bytes_done`、`session_bytes_total`
+- 条目维度：`relative_path`、`entry_bytes_done`、`entry_bytes_total`
+- 运行维度：`speed_bytes_per_sec`、`eta_seconds`、`stage`、`message`
 
-| 实体 | 字段 | 说明 |
-|---|---|---|
-| FileMetadata | filename, filesize | 协议头部元数据 |
-| SendResult | filename, filesize, sent_bytes, remote_host, remote_port | 发送结果 |
-| ReceiveResult | filename, filesize, received_bytes, output_path, peer_host, peer_port | 接收结果 |
+### 4.2 发送端进度链路
 
-## 5.3 后续可扩展数据库模型（非 V1.0 必需）
+- `send_session` 内部按分块发送文件。
+- 每个块完成后触发 `progress_callback(TransferProgress)`。
+- 关键阶段：`session_start`、`entry_file`、`entry_result`、`session_end`。
 
-如需审计日志，可新增 `transfer_log` 表：
+### 4.3 接收端进度链路
 
-- `id` (PK)
-- `direction` (`send`/`recv`)
-- `filename`
-- `filesize`
-- `remote_addr`
-- `status`
-- `created_at`
+- `receive_session_from_connection` 内部按分块接收文件。
+- 每个块写入后触发进度事件。
+- 关键阶段：`session_start`、`entry_file`、`entry_result`、`session_end`。
 
-## 6. 关键技术决策
+### 4.4 GUI 消费方式
 
-- 使用 `socket.create_connection` 简化连接与超时处理。
-- 使用 `recv_exact` 处理 TCP 分包，避免粘包导致的协议错误。
-- 使用分块读写降低内存占用，适配大文件。
+- `SendSessionWorker` 与 `ReceiverServerWorker` 通过 Qt `Signal` 透传进度对象。
+- `MainWindow` 更新会话进度条、条目进度条、速度/ETA 文本。
+
+## 5. GUI 状态机（V1.4）
+
+发送按钮由 `send_button_state` 控制：
+
+- 未连接：`先开启连接`（禁用）
+- 已连接无源：`请先添加文件`（禁用）
+- 已连接且有源：`开始发送`（启用）
+- 发送中：`发送中...`（禁用）
+
+禁用态采用更高对比度样式，确保可辨识性。
+
+## 6. 断点续传方案边界
+
+当前版本输出调研结论，不启用正式断点续传。
+
+建议实施路线：
+
+1. 阶段 A：文件级断点续传（`resume_id + offset + journal`）。
+2. 阶段 B：块级断点续传（引入块索引和更细粒度一致性校验）。
 
 ## 7. 错误处理策略
 
-- `ConfigurationError`：参数非法、文件不存在。
-- `NetworkError`：连接失败、监听失败、端口冲突。
-- `ProtocolError`：头部非法、连接提前断开、字节不完整。
+- `ConfigurationError`：参数非法。
+- `NetworkError`：连接、监听、网络中断。
+- `ProtocolError`：头部非法、字段不合法、字节流不完整。
 
-CLI 统一捕获并输出 `error: <detail>`，返回非零退出码。
+CLI 统一输出 `error: ...` 并返回非 0。
 
-## 8. 前端界面实现说明
+## 8. 打包与交付
 
-- 依据需求文档，前端形态为命令行交互界面（CLI），不包含 Web GUI。
-- CLI 输出包含监听状态、发送结果、接收结果与错误信息，满足可操作性要求。
-
-## 9. 安装包架构（V1.1）
-
-### 9.1 构建分层
-
-1. PyInstaller 产出自包含运行目录（`dist/fileferry`）。
-2. 平台安装器将运行目录封装为可安装包：
-   - Windows：Inno Setup (`.exe`)
-   - macOS：pkgbuild/productbuild (`.pkg`)
-   - Linux：`dpkg-deb` (`.deb`) + `rpmbuild` (`.rpm`)
-
-### 9.2 快捷方式与入口
-
-- Windows：开始菜单与可选桌面快捷方式，指向命令帮助/发送/接收入口。
-- macOS：`/Applications/FileFerry.app` + `/usr/local/bin/fileferry`。
-- Linux：`/usr/bin/fileferry` + `.desktop` 菜单项。
-
-### 9.3 卸载机制
-
-- Windows：控制面板/设置中标准卸载（Inno 自动注册）。
-- macOS：提供卸载脚本 `/usr/local/share/fileferry/uninstall_fileferry.sh`。
-- Linux：通过包管理器标准卸载（`apt remove` / `dnf remove`）。
-
-## 10. GUI 架构（V1.3）
-
-- 窗口层：`MainWindow` 负责中文 UI、状态展示、按钮交互。
-- 后台线程：
-  - `SendSessionWorker`：异步发送会话，避免阻塞界面。
-  - `ReceiverServerWorker`：持续监听，支持手动开启/断开连接。
-- 连接控制：
-  - 发送端：手动“开启连接/断开连接”（连接可达性检查 + 状态门控）。
-  - 接收端：手动开启监听与关闭监听，监听周期内可处理多次会话。
+- CLI 与 GUI 双入口并存。
+- 继续使用 PyInstaller + 平台安装器两层构建。
+- 保持 Windows/macOS/Linux 主流安装流程兼容。

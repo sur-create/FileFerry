@@ -7,7 +7,7 @@ import socket
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 from .errors import ConfigurationError, NetworkError, ProtocolError
 from .protocol import (
@@ -15,11 +15,11 @@ from .protocol import (
     payload_size_from_header,
     recv_frame_header,
     recv_payload_discard,
-    recv_payload_to_file,
     resolve_relative_output_path,
     sanitize_relative_path,
     send_frame_header,
 )
+from .progress import TransferProgress
 
 DEFAULT_CHUNK_SIZE = 64 * 1024
 VALID_CONFLICT_POLICIES = {"overwrite", "skip", "rename"}
@@ -34,6 +34,7 @@ class ReceiverConfig:
     chunk_size: int = DEFAULT_CHUNK_SIZE
     conflict_policy: str = "overwrite"
     continue_on_error: bool = True
+    progress_callback: Optional[Callable[[TransferProgress], None]] = None
 
 
 @dataclass(frozen=True)
@@ -113,6 +114,14 @@ def _resolve_renamed_dir_path(target_path: Path) -> Path:
     raise ProtocolError("unable to allocate renamed directory path")
 
 
+def _emit_progress(
+    callback: Optional[Callable[[TransferProgress], None]],
+    progress: TransferProgress,
+) -> None:
+    if callback is not None:
+        callback(progress)
+
+
 def _process_dir_entry(config: ReceiverConfig, relative_path: str) -> EntryReceiveResult:
     target = resolve_relative_output_path(config.output_dir, relative_path)
 
@@ -175,6 +184,11 @@ def _process_file_entry(
     relative_path: str,
     payload_size: int,
     mtime: Optional[int],
+    total_entries: int,
+    completed_entries: int,
+    current_index: int,
+    total_bytes_received: int,
+    session_bytes_total: int,
 ) -> EntryReceiveResult:
     target = resolve_relative_output_path(config.output_dir, relative_path)
     status, write_target, saved_path, detail = _apply_file_conflict_policy(config, target)
@@ -202,8 +216,39 @@ def _process_file_entry(
     assert write_target is not None
     write_target.parent.mkdir(parents=True, exist_ok=True)
 
+    received = 0
+    started = time.perf_counter()
     with write_target.open("wb") as fp:
-        received = recv_payload_to_file(conn, payload_size, fp, config.chunk_size)
+        while received < payload_size:
+            packet = conn.recv(min(config.chunk_size, payload_size - received))
+            if not packet:
+                raise ProtocolError("connection closed before receiving all file bytes")
+            fp.write(packet)
+            received += len(packet)
+
+            now = time.perf_counter()
+            elapsed = max(now - started, 1e-9)
+            speed = received / elapsed
+            eta = (payload_size - received) / speed if speed > 0 and received < payload_size else None
+            _emit_progress(
+                config.progress_callback,
+                TransferProgress(
+                    direction="recv",
+                    stage="entry_file",
+                    total_entries=total_entries,
+                    completed_entries=completed_entries,
+                    current_index=current_index,
+                    relative_path=relative_path,
+                    kind="file",
+                    entry_bytes_done=received,
+                    entry_bytes_total=payload_size,
+                    session_bytes_done=total_bytes_received + received,
+                    session_bytes_total=session_bytes_total,
+                    speed_bytes_per_sec=speed,
+                    eta_seconds=eta,
+                    message="文件接收中",
+                ),
+            )
 
     if mtime is not None:
         os.utime(write_target, (mtime, mtime))
@@ -269,6 +314,15 @@ def receive_session_from_connection(
         raise ProtocolError(f"unsupported protocol_version: {protocol_version}")
 
     effective_policy, effective_continue = _resolve_session_policy(config, start_frame)
+    entry_count_raw = start_frame.get("entry_count")
+    entry_count = entry_count_raw if isinstance(entry_count_raw, int) and entry_count_raw >= 0 else 0
+    session_bytes_total_raw = start_frame.get("total_file_bytes")
+    session_bytes_total = (
+        session_bytes_total_raw
+        if isinstance(session_bytes_total_raw, int) and session_bytes_total_raw >= 0
+        else 0
+    )
+
     entry_config = ReceiverConfig(
         host=config.host,
         port=config.port,
@@ -277,10 +331,25 @@ def receive_session_from_connection(
         chunk_size=config.chunk_size,
         conflict_policy=effective_policy,
         continue_on_error=effective_continue,
+        progress_callback=config.progress_callback,
     )
 
     results: List[EntryReceiveResult] = []
     total_bytes = 0
+    completed_entries = 0
+
+    _emit_progress(
+        config.progress_callback,
+        TransferProgress(
+            direction="recv",
+            stage="session_start",
+            total_entries=entry_count,
+            completed_entries=0,
+            session_bytes_done=0,
+            session_bytes_total=session_bytes_total,
+            message="会话已开始",
+        ),
+    )
 
     while True:
         header = recv_frame_header(conn)
@@ -304,6 +373,23 @@ def receive_session_from_connection(
             result = _process_dir_entry(entry_config, relative_path)
             results.append(result)
             _send_entry_result(conn, result)
+            completed_entries += 1
+            _emit_progress(
+                config.progress_callback,
+                TransferProgress(
+                    direction="recv",
+                    stage="entry_result",
+                    total_entries=entry_count,
+                    completed_entries=completed_entries,
+                    current_index=completed_entries,
+                    relative_path=relative_path,
+                    kind="dir",
+                    session_bytes_done=total_bytes,
+                    session_bytes_total=session_bytes_total,
+                    message=f"目录结果：{result.status}",
+                    detail=result.detail,
+                ),
+            )
 
             if result.status == "error" and not entry_config.continue_on_error:
                 break
@@ -333,14 +419,59 @@ def receive_session_from_connection(
                 )
                 results.append(result)
                 _send_entry_result(conn, result)
+                completed_entries += 1
+                _emit_progress(
+                    config.progress_callback,
+                    TransferProgress(
+                        direction="recv",
+                        stage="entry_result",
+                        total_entries=entry_count,
+                        completed_entries=completed_entries,
+                        current_index=completed_entries,
+                        relative_path=relative_path,
+                        kind="file",
+                        session_bytes_done=total_bytes,
+                        session_bytes_total=session_bytes_total,
+                        message="文件结果：error",
+                        detail=result.detail,
+                    ),
+                )
                 if not entry_config.continue_on_error:
                     break
                 continue
 
-            result = _process_file_entry(conn, entry_config, relative_path, payload_size, mtime)
+            result = _process_file_entry(
+                conn,
+                entry_config,
+                relative_path,
+                payload_size,
+                mtime,
+                entry_count,
+                completed_entries,
+                completed_entries + 1,
+                total_bytes,
+                session_bytes_total,
+            )
             results.append(result)
             total_bytes += result.received_bytes
             _send_entry_result(conn, result)
+            completed_entries += 1
+            _emit_progress(
+                config.progress_callback,
+                TransferProgress(
+                    direction="recv",
+                    stage="entry_result",
+                    total_entries=entry_count,
+                    completed_entries=completed_entries,
+                    current_index=completed_entries,
+                    relative_path=relative_path,
+                    kind="file",
+                    session_bytes_done=total_bytes,
+                    session_bytes_total=session_bytes_total,
+                    message=f"文件结果：{result.status}",
+                    detail=result.detail,
+                ),
+            )
 
             if result.status == "error" and not entry_config.continue_on_error:
                 break
@@ -356,6 +487,18 @@ def receive_session_from_connection(
             "total_entries": len(results),
             "failed_entries": sum(1 for result in results if result.status == "error"),
         },
+    )
+    _emit_progress(
+        config.progress_callback,
+        TransferProgress(
+            direction="recv",
+            stage="session_end",
+            total_entries=entry_count,
+            completed_entries=completed_entries,
+            session_bytes_done=total_bytes,
+            session_bytes_total=session_bytes_total,
+            message="会话已结束",
+        ),
     )
 
     elapsed = time.perf_counter() - start

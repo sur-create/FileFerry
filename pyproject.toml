@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fileferry"
-version = "1.3.0"
-description = "LAN single-file transfer tool"
+version = "1.4.0"
+description = "LAN file transfer tool"
 readme = "README.md"
 requires-python = ">=3.8"
 authors = [
